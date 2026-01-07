@@ -1,3 +1,57 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Distribution / packaging
+build/
+dist/
+*.egg-info/
+egg-info/
+pip-wheel-metadata/
+
+# Virtual environments
+.env
+.venv
+venv/
+ENV/
+env/
+
+# IDEs
+.vscode/
+.idea/
+
+# macOS
+.DS_Store
+
+# Logs and coverage
+.coverage
+coverage.xml
+htmlcov/
+.pytest_cache/
+
+# SQLite DBs and session files
+*.sqlite
+data.sqlite
+*.db
+*.session
+session.session
+config.yaml
+
+# Generated site and media
+site/
+media/
+
+# Ignore example's generated data and site
+tgarchive/example/data.sqlite
+tgarchive/example/site/
+tgarchive/example/media/
+tgarchive/example/session.session
+
+# Temporary / system files
+*.swp
+*~
+*.bak
 # https://github.com/github/gitignore/blob/main/Python.gitignore
 
 # Byte-compiled / optimized / DLL files
