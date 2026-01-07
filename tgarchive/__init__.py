@@ -127,6 +127,13 @@ def main():
         # Import because the Telegram client import is quite heavy.
         from .sync import Sync
 
+        # Ensure an asyncio event loop exists (fixes RuntimeError on Python 3.11+)
+        import asyncio
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            asyncio.set_event_loop(asyncio.new_event_loop())
+
         if args.id and args.from_id and args.from_id > 0:
             logging.error("pass either --id or --from-id but not both")
             sys.exit(1)

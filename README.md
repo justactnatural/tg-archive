@@ -36,7 +36,7 @@ tg-archive uses the [Telethon](https://github.com/LonamiWebs/Telethon) Telegram 
 
 1. `tg-archive --new --path=mysite` (creates a new site. `cd` into mysite and edit `config.yaml`).
 1. `tg-archive --sync` (syncs data into `data.sqlite`).
-  Note: First time connection will prompt for your phone number + a Telegram auth code sent to the app. On successful auth, a `session.session` file is created. DO NOT SHARE this session file publicly as it contains the API autorization for your account.
+  Note: First time connection will prompt for your ph,pm. one number + a Telegram auth code sent to the app. On successful auth, a `session.session` file is created. DO NOT SHARE this session file publicly as it contains the API autorization for your account.
 1. `tg-archive --build` (builds the static site into the `site` directory, which can be published)
 
 ### Customization
