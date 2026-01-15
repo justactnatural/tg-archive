@@ -6,6 +6,7 @@ import os
 import tempfile
 import shutil
 import time
+import re
 
 from PIL import Image
 from telethon import TelegramClient, errors, sync
@@ -149,6 +150,13 @@ class Sync:
                 continue
 
             # Media.
+            topic_id = self._get_topic_id(m)
+            topic_title = self._get_topic_title(m)
+            if topic_title and topic_id:
+                self.db.insert_topic(topic_id, topic_title)
+
+            topic_dir = self._get_topic_dir(topic_id, topic_title)
+
             sticker = None
             med = None
             if m.media:
@@ -163,7 +171,7 @@ class Sync:
                 elif isinstance(m.media, telethon.tl.types.MessageMediaPoll):
                     med = self._make_poll(m)
                 else:
-                    med = self._get_media(m)
+                    med = self._get_media(m, topic_dir)
 
             # Message.
             typ = "message"
@@ -183,7 +191,9 @@ class Sync:
                 content=sticker if sticker else m.raw_text,
                 reply_to=m.reply_to_msg_id if m.reply_to and m.reply_to.reply_to_msg_id else None,
                 user=self._get_user(m.sender, m.chat),
-                media=med
+                media=med,
+                topic_id=topic_id,
+                topic_title=topic_title
             )
 
     def _fetch_messages(self, group, offset_id, ids=None) -> Message:
@@ -280,7 +290,7 @@ class Sync:
             thumb=None
         )
 
-    def _get_media(self, msg):
+    def _get_media(self, msg, topic_dir):
         if isinstance(msg.media, telethon.tl.types.MessageMediaWebPage) and \
                 not isinstance(msg.media.webpage, telethon.tl.types.WebPageEmpty):
             return Media(
@@ -305,7 +315,7 @@ class Sync:
 
                 logging.info("downloading media #{}".format(msg.id))
                 try:
-                    basename, fname, thumb = self._download_media(msg)
+                    basename, fname, thumb = self._download_media(msg, topic_dir)
                     return Media(
                         id=msg.id,
                         type="photo",
@@ -318,7 +328,7 @@ class Sync:
                     logging.error(
                         "error downloading media: #{}: {}".format(msg.id, e))
 
-    def _download_media(self, msg) -> [str, str, str]:
+    def _download_media(self, msg, topic_dir) -> [str, str, str]:
         """
         Download a media / file attached to a message and return its original
         filename, sanitized name on disk, and the thumbnail (if any). 
@@ -330,7 +340,10 @@ class Sync:
         basename = os.path.basename(fpath)
 
         newname = "{}.{}".format(msg.id, self._get_file_ext(basename))
-        shutil.move(fpath, os.path.join(self.config["media_dir"], newname))
+        dest_dir = os.path.join(self.config["media_dir"], topic_dir) if topic_dir else self.config["media_dir"]
+        os.makedirs(dest_dir, exist_ok=True)
+        shutil.move(fpath, os.path.join(dest_dir, newname))
+        rel_name = "{}/{}".format(topic_dir, newname) if topic_dir else newname
 
         # If it's a photo, download the thumbnail.
         tname = None
@@ -339,9 +352,10 @@ class Sync:
                 msg, file=tempfile.gettempdir(), thumb=1)
             tname = "thumb_{}.{}".format(
                 msg.id, self._get_file_ext(os.path.basename(tpath)))
-            shutil.move(tpath, os.path.join(self.config["media_dir"], tname))
+            shutil.move(tpath, os.path.join(dest_dir, tname))
+            tname = "{}/{}".format(topic_dir, tname) if topic_dir else tname
 
-        return basename, newname, tname
+        return basename, rel_name, tname
 
     def _get_file_ext(self, f) -> str:
         if "." in f:
@@ -402,6 +416,50 @@ class Sync:
             exit(1)
 
         return entity.id
+
+    def _get_topic_id(self, msg):
+        top_id = getattr(msg, "reply_to_top_id", None)
+        if top_id:
+            return top_id
+        reply_to = getattr(msg, "reply_to", None)
+        if reply_to:
+            top_id = getattr(reply_to, "reply_to_top_id", None)
+            if top_id:
+                return top_id
+        if msg.action and isinstance(msg.action, telethon.tl.types.MessageActionTopicCreate):
+            return msg.id
+        return None
+
+    def _get_topic_title(self, msg):
+        action = getattr(msg, "action", None)
+        if action:
+            if isinstance(action, telethon.tl.types.MessageActionTopicCreate):
+                return action.title
+            if isinstance(action, telethon.tl.types.MessageActionTopicEdit) and getattr(action, "title", None):
+                return action.title
+
+        forum_topic = getattr(msg, "forum_topic", None)
+        if forum_topic and getattr(forum_topic, "title", None):
+            return forum_topic.title
+        return None
+
+    def _get_topic_dir(self, topic_id, topic_title):
+        if not self.config.get("media_by_topic", False):
+            return ""
+        if topic_id:
+            return "topic-{}".format(topic_id)
+        if topic_title:
+            return self._slugify(topic_title, None)
+        return "general"
+
+    def _slugify(self, text, topic_id=None):
+        slug = re.sub(r"[^0-9A-Za-z]+", "-", text.strip().lower())
+        slug = slug.strip("-")
+        if slug:
+            return slug
+        if topic_id:
+            return "topic-{}".format(topic_id)
+        return "topic"
 
     def _downloadAvatarForUserOrChat(self, entity):
         avatar = None
