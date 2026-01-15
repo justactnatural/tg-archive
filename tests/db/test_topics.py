@@ -10,7 +10,7 @@ except Exception as e:  # pragma: no cover
 from tgarchive.db import DB, Media, Message, User
 
 
-class DBTests(unittest.TestCase):
+class DBTopicsTests(unittest.TestCase):
     def test_topics_table_and_media_messages(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             db_path = os.path.join(tmpdir, "data.sqlite")
