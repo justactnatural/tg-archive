@@ -17,8 +17,10 @@ CREATE table messages (
     reply_to INTEGER,
     user_id INTEGER,
     media_id INTEGER,
+    topic_id INTEGER,
     FOREIGN KEY(user_id) REFERENCES users(id),
-    FOREIGN KEY(media_id) REFERENCES media(id)
+    FOREIGN KEY(media_id) REFERENCES media(id),
+    FOREIGN KEY(topic_id) REFERENCES topics(id)
 );
 ##
 CREATE table users (
@@ -38,13 +40,18 @@ CREATE table media (
     description TEXT,
     thumb TEXT
 );
+##
+CREATE table topics (
+    id INTEGER NOT NULL PRIMARY KEY,
+    title TEXT
+);
 """
 
 User = namedtuple(
     "User", ["id", "username", "first_name", "last_name", "tags", "avatar"])
 
 Message = namedtuple(
-    "Message", ["id", "type", "date", "edit_date", "content", "reply_to", "user", "media"])
+    "Message", ["id", "type", "date", "edit_date", "content", "reply_to", "user", "media", "topic_id", "topic_title"])
 
 Media = namedtuple(
     "Media", ["id", "type", "url", "title", "description", "thumb"])
@@ -80,6 +87,39 @@ class DB:
             for s in schema.split("##"):
                 self.conn.cursor().execute(s)
                 self.conn.commit()
+        else:
+            self._ensure_topics_table()
+            self._ensure_messages_topic_id()
+
+    def _table_exists(self, name) -> bool:
+        cur = self.conn.cursor()
+        cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name=?", (name,))
+        return cur.fetchone() is not None
+
+    def _column_exists(self, table, column) -> bool:
+        cur = self.conn.cursor()
+        cur.execute("PRAGMA table_info({})".format(table))
+        for row in cur.fetchall():
+            if row[1] == column:
+                return True
+        return False
+
+    def _ensure_topics_table(self):
+        if self._table_exists("topics"):
+            return
+        self.conn.cursor().execute("""
+            CREATE table topics (
+                id INTEGER NOT NULL PRIMARY KEY,
+                title TEXT
+            );
+        """)
+        self.conn.commit()
+
+    def _ensure_messages_topic_id(self):
+        if self._column_exists("messages", "topic_id"):
+            return
+        self.conn.cursor().execute("ALTER TABLE messages ADD COLUMN topic_id INTEGER;")
+        self.conn.commit()
 
     def _parse_date(self, d) -> str:
         return datetime.strptime(d, "%Y-%m-%dT%H:%M:%S%z")
@@ -152,12 +192,15 @@ class DB:
         cur = self.conn.cursor()
         cur.execute("""
             SELECT messages.id, messages.type, messages.date, messages.edit_date,
-            messages.content, messages.reply_to, messages.user_id,
+            messages.content, messages.reply_to, messages.topic_id,
+            messages.user_id,
             users.username, users.first_name, users.last_name, users.tags, users.avatar,
-            media.id, media.type, media.url, media.title, media.description, media.thumb
+            media.id, media.type, media.url, media.title, media.description, media.thumb,
+            topics.title
             FROM messages
             LEFT JOIN users ON (users.id = messages.user_id)
             LEFT JOIN media ON (media.id = messages.media_id)
+            LEFT JOIN topics ON (topics.id = messages.topic_id)
             WHERE strftime('%Y%m', date) = ?
             AND messages.id > ? ORDER by messages.id LIMIT ?
             """, (date, last_id, limit))
@@ -198,11 +241,16 @@ class DB:
                      m.thumb)
                     )
 
+    def update_media_paths(self, media_id: int, url: str, thumb: str):
+        cur = self.conn.cursor()
+        cur.execute("""UPDATE media SET url = ?, thumb = ? WHERE id = ?""",
+                    (url, thumb, media_id))
+
     def insert_message(self, m: Message):
         cur = self.conn.cursor()
         cur.execute("""INSERT OR REPLACE INTO messages
-            (id, type, date, edit_date, content, reply_to, user_id, media_id)
-            VALUES(?, ?, ?, ?, ?, ?, ?, ?)""",
+            (id, type, date, edit_date, content, reply_to, user_id, media_id, topic_id)
+            VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                     (m.id,
                      m.type,
                      m.date.strftime("%Y-%m-%d %H:%M:%S"),
@@ -211,18 +259,29 @@ class DB:
                      m.content,
                      m.reply_to,
                      m.user.id,
-                     m.media.id if m.media else None)
+                     m.media.id if m.media else None,
+                     m.topic_id)
                     )
 
     def commit(self):
         """Commit pending writes to the DB."""
         self.conn.commit()
 
+    def insert_topic(self, topic_id: int, title: str):
+        if not topic_id or not title:
+            return
+        cur = self.conn.cursor()
+        cur.execute("""INSERT INTO topics (id, title)
+            VALUES(?, ?) ON CONFLICT (id)
+            DO UPDATE SET title=excluded.title
+            """, (topic_id, title))
+
     def _make_message(self, m) -> Message:
         """Makes a Message() object from an SQL result tuple."""
-        id, typ, date, edit_date, content, reply_to, \
+        id, typ, date, edit_date, content, reply_to, topic_id, \
             user_id, username, first_name, last_name, tags, avatar, \
-            media_id, media_type, media_url, media_title, media_description, media_thumb = m
+            media_id, media_type, media_url, media_title, media_description, media_thumb, \
+            topic_title = m
 
         md = None
         if media_id:
@@ -256,4 +315,26 @@ class DB:
                                  last_name=last_name,
                                  tags=tags,
                                  avatar=avatar),
-                       media=md)
+                       media=md,
+                       topic_id=topic_id,
+                       topic_title=topic_title)
+
+    def get_media_messages(self) -> Iterator[Message]:
+        cur = self.conn.cursor()
+        cur.execute("""
+            SELECT messages.id, messages.type, messages.date, messages.edit_date,
+            messages.content, messages.reply_to, messages.topic_id,
+            messages.user_id,
+            users.username, users.first_name, users.last_name, users.tags, users.avatar,
+            media.id, media.type, media.url, media.title, media.description, media.thumb,
+            topics.title
+            FROM messages
+            LEFT JOIN users ON (users.id = messages.user_id)
+            LEFT JOIN media ON (media.id = messages.media_id)
+            LEFT JOIN topics ON (topics.id = messages.topic_id)
+            WHERE media.id IS NOT NULL
+            ORDER BY messages.id
+        """)
+
+        for r in cur.fetchall():
+            yield self._make_message(r)

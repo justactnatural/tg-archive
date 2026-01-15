@@ -21,6 +21,8 @@ _CONFIG = {
     "download_media": False,
     "media_dir": "media",
     "media_mime_types": [],
+    "media_by_topic": False,
+    "migrate_media_by_topic": False,
     "proxy": {
         "enable": False,
     },
@@ -41,7 +43,10 @@ _CONFIG = {
     "site_name": "@{group} (Telegram) archive",
     "site_description": "Public archive of @{group} Telegram messages.",
     "meta_description": "@{group} {date} Telegram message archive.",
-    "page_title": "{date} - @{group} Telegram message archive."
+    "page_title": "{date} - @{group} Telegram message archive.",
+    "publish_media_index": False,
+    "media_pages_dir": "media-pages",
+    "publish_media_hashtags": True
 }
 
 
@@ -87,6 +92,10 @@ def main():
                    dest="template", help="path to the template file")
     b.add_argument("--rss-template", action="store", type=str, default=None,
                    dest="rss_template", help="path to the rss template file")
+    b.add_argument("--media-template", action="store", type=str, default="media_template.html",
+                   dest="media_template", help="path to the media template file")
+    b.add_argument("--migrate-media", action="store_true", dest="migrate_media",
+                   help="move existing media into topic folders and update DB paths")
     b.add_argument("--symlink", action="store_true", dest="symlink",
                    help="symlink media and other static files instead of copying")
 
@@ -161,10 +170,15 @@ def main():
 
         logging.info("building site")
         config = get_config(args.config)
+        if args.migrate_media:
+            config["migrate_media_by_topic"] = True
+            config["media_by_topic"] = True
         b = Build(config, DB(args.data, config["timezone"]), args.symlink)
         b.load_template(args.template)
         if args.rss_template:
             b.load_rss_template(args.rss_template)
+        if config.get("publish_media_index", False):
+            b.load_media_template(args.media_template)
         b.build()
 
         logging.info("published to directory '{}'".format(config["publish_dir"]))
