@@ -331,12 +331,30 @@ div.body > div.text {
 		color: var(--primary);
 		border-bottom: 2px solid var(--primary);
 	}
-	.pagination.bottom {
-		margin-top: 30px;
-	}
-	.pagination.top {
-		margin-bottom: 30px;
-	}
+.pagination.bottom {
+	margin-top: 30px;
+}
+.pagination.top {
+	margin-bottom: 30px;
+}
+
+.media-content h1 {
+	margin-bottom: 10px;
+}
+.media-index {
+	margin-bottom: 30px;
+}
+.media-index li {
+	margin-bottom: 6px;
+}
+.media-list .media-item {
+	margin-bottom: 12px;
+}
+.media-list .meta {
+	color: var(--light);
+	font-size: var(--size-small);
+	margin-left: 10px;
+}
 
 @media(max-width: 1350px) {
 	.sidebar, .content, .dayline {

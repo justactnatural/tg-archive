@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<title>{{ title }} - @{{ config.group }}</title>
+	<meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+	<meta name="description" content="{{ config.site_description.format(group=config.group, date=config.date) }}" />
+	<meta name="referrer" content="no-referrer">
+	<meta name="viewport" content="width=device-width, initial-scale=1" />
+	<link rel="shortcut icon" href="{{ root_prefix }}static/favicon.png" />
+
+	<meta property="og:title" content="{{ title }}" />
+	<meta property="og:description" content="{{ config.site_description.format(group=config.group, date=config.date) }}" />
+	<meta property="og:type" content="website" />
+	<meta property="og:url" content="{{ config.site_url }}/{{ media_pages_dir }}/index.html" />
+	<meta property="og:image" content="{{ config.site_url }}/static/thumb.png" />
+
+	<link rel="preconnect" href="https://fonts.gstatic.com">
+	<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet"> 
+	<link href="{{ root_prefix }}static/style.css" rel="stylesheet" type="text/css" />
+</head>
+<body>
+
+<div class="wrap">
+	<div class="container">
+		<nav class="nav">
+			<a href="{{ root_prefix }}index.html">@{{ config.group }}</a>
+			<label class="burger" for="burger" tabindex="0"><span></span><span></span><span></span></label>
+		</nav>
+		<input type="checkbox" id="burger" />
+
+		<section class="sidebar" id="sidebar">
+			<header class="header">
+				<div class="logo">
+					<a href="{{ config.site_url }}"><img src="{{ root_prefix }}static/logo.svg" alt="" /></a>
+					<p class="desc">
+						<a href="{{ config.telegram_url.format(id=config.group) }}" rel="noreferer nopener nofollow">@{{ config.group }}</a> /
+						{{ config.site_description.format(group=config.group, date=config.date) }}
+					</p>
+				</div>
+			</header>
+			<ul class="index">
+				<li><a href="index.html">Media index</a></li>
+				<li><a href="{{ root_prefix }}index.html">Message archive</a></li>
+			</ul>
+			<ul class="timeline index">
+		        {% for year, months in timeline.items() | reverse %}
+		        <li class="">
+		        	<h3 class="year"><a href="{{ root_prefix }}{{ months[0].slug }}.html">{{ year }}</a></h3>
+		        	<ul class="months">
+		        		{% for m in months | reverse %}
+		        			<li class="">
+		        				<a href="{{ root_prefix }}{{ m.slug }}.html">
+		        					{{ m.label }}
+		        					<span class="count">({{ m.count }})
+		        				</span></a>
+		        			</li>
+		        		{% endfor %}
+		        	</ul>
+		        </li>
+		        {% endfor %}
+			</ul>
+
+			<footer class="footer">
+				{% if config.publish_rss_feed %}
+					<a href="{{ root_prefix }}index.xml">RSS feed.</a>
+				{% endif %} &nbsp;&nbsp;
+				Made with <a href="https://github.com/knadh/tg-archive">tg-archive</a>
+			</footer>
+		</section>
+
+		<section class="content media-content">
+			{% if view == "index" %}
+				<h1>Media</h1>
+				<h2>{{ config.group }}</h2>
+				<ul class="media-index">
+					{% for t in topics %}
+						<li>
+							<a href="topic-{{ t.id }}.html">{{ t.title }}</a>
+							<span class="count">({{ t.count }})</span>
+						</li>
+					{% endfor %}
+				</ul>
+
+				{% if config.publish_media_hashtags and hashtags %}
+					<h2>Hashtags</h2>
+					<ul class="media-index">
+						{% for h in hashtags %}
+							<li>
+								<a href="tag-{{ h.slug }}.html">{{ h.tag }}</a>
+								<span class="count">({{ h.count }})</span>
+							</li>
+						{% endfor %}
+					</ul>
+				{% endif %}
+			{% else %}
+				<h1>{{ title }}</h1>
+				<ul class="media-list">
+					{% for m in messages %}
+						{% set media_title = (m.content or '').strip() %}
+						{% if not media_title %}
+							{% set media_title = m.media.title %}
+						{% endif %}
+						<li class="media-item">
+							<a href="{{ root_prefix }}{{ config.media_dir }}/{{ m.media.url }}">{{ media_title }}</a>
+							<span class="meta">
+								<a href="{{ root_prefix }}{{ page_ids[m.id] }}#{{ m.id }}">view in archive</a>
+								&middot; @{{ m.user.username }}
+								&middot; {{ m.date.strftime("%Y-%m-%d %H:%M") }}
+							</span>
+						</li>
+					{% endfor %}
+				</ul>
+			{% endif %}
+		</section>
+	</div><!-- container -->
+</div>
+<script src="{{ root_prefix }}static/main.js"></script>
+</body>
+</html>
