@@ -43,6 +43,11 @@
 						<a href="{{ config.telegram_url.format(id=config.group) }}" rel="noreferer nopener nofollow">@{{ config.group }}</a> /
 						{{ config.site_description.format(group=config.group, date=config.date) }}
 					</p>
+					{% if config.publish_media_index %}
+						<p class="desc">
+							<a href="{{ config.media_pages_dir }}/index.html">Media index</a>
+						</p>
+					{% endif %}
 				</div>
 			</header>
 			<ul class="timeline index">
