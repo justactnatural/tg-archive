@@ -9,7 +9,7 @@ except Exception as e:  # pragma: no cover
 from tgarchive.sync import Sync
 
 
-class SyncTests(unittest.TestCase):
+class SyncTopicTests(unittest.TestCase):
     def test_slugify_fallback_uses_topic_id(self):
         s = Sync.__new__(Sync)
         self.assertEqual(s._slugify("!!!", topic_id=7), "topic-7")
@@ -40,6 +40,17 @@ class SyncTests(unittest.TestCase):
 
         s = Sync.__new__(Sync)
         self.assertEqual(s._get_topic_id(Msg()), 123)
+
+    def test_get_topic_title_prefers_forum_topic(self):
+        class ForumTopic:
+            title = "Topic A"
+
+        class Msg:
+            action = None
+            forum_topic = ForumTopic()
+
+        s = Sync.__new__(Sync)
+        self.assertEqual(s._get_topic_title(Msg()), "Topic A")
 
 
 if __name__ == "__main__":
