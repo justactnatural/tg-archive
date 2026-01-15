@@ -25,6 +25,7 @@ tg-archive uses the [Telethon](https://github.com/LonamiWebs/Telethon) Telegram 
 - Year / Month / Day indexes with deep linking across pages.
 - "In reply to" on replies with links to parent messages across pages.
 - RSS / Atom feed of recent messages.
+- Optional media index pages grouped by forum topics and hashtags.
 
 ## Install
 - Get [Telegram API credentials](https://my.telegram.org/auth?to=apps). Normal user account API and not the Bot API.
@@ -46,9 +47,34 @@ tg-archive uses the [Telethon](https://github.com/LonamiWebs/Telethon) Telegram 
 ### Customization
 Edit the generated `template.html` and static assets in the `./static` directory to customize the site.
 
+To enable the media index, set `publish_media_index: true` in `config.yaml` and provide
+`media_template.html` alongside your main template (or pass `--media-template`).
+Use `media_pages_dir` to control where the pages are written and `publish_media_hashtags`
+to toggle hashtag pages.
+
+To organize downloaded media into topic subfolders, enable `media_by_topic: true`.
+To migrate existing media into those folders, set `migrate_media_by_topic: true` or run
+`tg-archive --build --migrate-media`.
+
+Example media config:
+```yaml
+publish_media_index: true
+media_pages_dir: "media-pages"
+publish_media_hashtags: true
+media_by_topic: true
+```
+
+### Forum topics
+Topic grouping uses Telegram forum topics (available on supergroups with topics enabled).
+If your group does not have topics enabled, all media will fall under a single "general" topic.
+
 ### Note
 - The sync can be stopped (Ctrl+C) any time to be resumed later.
 - Setup a cron job to periodically sync messages and re-publish the archive.
 - Downloading large media files and long message history from large groups continuously may run into Telegram API's rate limits. Watch the debug output.
+
+### TODO
+- Add config validation for required keys (api_id, api_hash, group).
+- Add unit tests for fork-specific changes (media indexing and migration).
 
 Licensed under the MIT license.
