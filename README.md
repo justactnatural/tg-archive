@@ -32,6 +32,10 @@ tg-archive uses the [Telethon](https://github.com/LonamiWebs/Telethon) Telegram 
 
 - Install with: `uv pip install tg-archive` (tested with Python 3.13.2).
 
+- Optional: For media MIME detection in RSS, install `libmagic`:
+  - macOS: `brew install libmagic`
+  - Debian/Ubuntu: `apt-get install libmagic1`
+
 ### Usage
 
 1. `tg-archive --new --path=mysite` (creates a new site. `cd` into mysite and edit `config.yaml`).
