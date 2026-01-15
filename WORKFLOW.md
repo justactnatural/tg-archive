@@ -1,0 +1,44 @@
+# tg-archive Workflow (Sync + Build)
+
+This is a minimal zsh workflow to sync the database and build the static site.
+
+## One-time setup (optional)
+```zsh
+cd /Users/nathanmalitz/Code/tele-rippz/tg-archive
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+```
+
+## Sync the database
+```zsh
+cd /Users/nathanmalitz/Code/tele-rippz/tg-archive
+python3 -m tgarchive --sync \
+  --config /Users/nathanmalitz/Code/tele-rippz/tg-archive/tgarchive/example/config.yaml \
+  --session /Users/nathanmalitz/Code/tele-rippz/tg-archive/session.session
+```
+
+## Build the static site (with media migration)
+```zsh
+cd /Users/nathanmalitz/Code/tele-rippz/tg-archive
+python3 -m tgarchive --build \
+  --config /Users/nathanmalitz/Code/tele-rippz/tg-archive/tgarchive/example/config.yaml \
+  --template /Users/nathanmalitz/Code/tele-rippz/tg-archive/tgarchive/example/template.html \
+  --media-template /Users/nathanmalitz/Code/tele-rippz/tg-archive/tgarchive/example/media_template.html \
+  --migrate-media
+```
+
+## Build without migration (routine rebuilds)
+```zsh
+cd /Users/nathanmalitz/Code/tele-rippz/tg-archive
+python3 -m tgarchive --build \
+  --config /Users/nathanmalitz/Code/tele-rippz/tg-archive/tgarchive/example/config.yaml \
+  --template /Users/nathanmalitz/Code/tele-rippz/tg-archive/tgarchive/example/template.html \
+  --media-template /Users/nathanmalitz/Code/tele-rippz/tg-archive/tgarchive/example/media_template.html
+```
+
+## Shut down the local site preview
+If you started a local server (for example, `python3 -m http.server`), stop it with:
+```zsh
+Ctrl+C
+```
