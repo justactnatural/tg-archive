@@ -74,6 +74,10 @@ Titles resolve to IDs at sync time. If multiple topics share a title, you will b
 choose IDs (non-interactive runs should use IDs directly). Messages outside topics will be
 included as "general" when `include_general: true`.
 
+### Multi-group configs
+For multiple groups, use the `defaults` + `groups` + `build` structure shown in
+`config.example.yaml`. Each group syncs into its own DB and media directory, and the
+build step combines them into a single site.
 ### Note
 - The sync can be stopped (Ctrl+C) any time to be resumed later.
 - Setup a cron job to periodically sync messages and re-publish the archive.
