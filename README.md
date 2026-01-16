@@ -78,6 +78,10 @@ included as "general" when `include_general: true`.
 To sync only specific messages, set `message_ids` in `config.yaml` or pass `--id`.
 When present, only those message IDs are fetched.
 
+### Author filtering
+To sync only specific authors, set `author_ids` or `author_usernames` in `config.yaml`.
+When present, only messages from those authors are fetched.
+
 ### Multi-group configs
 For multiple groups, use the `defaults` + `groups` + `build` structure shown in
 `config.example.yaml`. Each group syncs into its own DB and media directory, and the

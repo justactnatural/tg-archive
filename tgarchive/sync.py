@@ -54,6 +54,7 @@ class Sync:
             logging.info("fetching from last message id={} ({})".format(
                 last_id, last_date))
 
+        self._resolve_author_filter()
         n = 0
         while True:
             has = False
@@ -152,6 +153,10 @@ class Sync:
             if not m:
                 continue
 
+            sender_id = getattr(m, "sender_id", None)
+            if not self._should_include_author(sender_id):
+                continue
+
             # Media.
             topic_id = self._get_topic_id(m)
             topic_title = self._get_topic_title(m)
@@ -188,6 +193,7 @@ class Sync:
                 elif isinstance(m.action, telethon.tl.types.MessageActionChatDeleteUser):
                     typ = "user_left"
 
+            user = self._get_user(m.sender, m.chat)
             yield Message(
                 type=typ,
                 id=m.id,
@@ -195,7 +201,7 @@ class Sync:
                 edit_date=m.edit_date,
                 content=sticker if sticker else m.raw_text,
                 reply_to=m.reply_to_msg_id if m.reply_to and m.reply_to.reply_to_msg_id else None,
-                user=self._get_user(m.sender, m.chat),
+                user=user,
                 media=med,
                 topic_id=topic_id,
                 topic_title=topic_title
@@ -440,6 +446,47 @@ class Sync:
             input_func=input,
         )
         self.allowed_topic_ids = set(resolved)
+
+    def _resolve_author_filter(self):
+        self.allowed_author_ids = None
+        author_ids = self.config.get("author_ids") or []
+        author_usernames = self.config.get("author_usernames") or []
+        if not author_ids and not author_usernames:
+            return
+
+        resolved = self._resolve_author_ids(
+            author_ids=author_ids,
+            author_usernames=author_usernames,
+            resolve_func=self._resolve_username_to_id
+        )
+        self.allowed_author_ids = set(resolved)
+
+    def _resolve_username_to_id(self, username):
+        entity = self.client.get_entity(username)
+        return entity.id
+
+    def _resolve_author_ids(self, author_ids, author_usernames, resolve_func):
+        resolved = set(int(x) for x in author_ids)
+        for raw in author_usernames:
+            uname = self._normalize_username(raw)
+            try:
+                resolved.add(int(resolve_func(uname)))
+            except Exception:
+                raise ValueError("author username not found: {}".format(raw))
+        return list(resolved)
+
+    def _normalize_username(self, username):
+        name = username.strip()
+        if name.startswith("@"):
+            name = name[1:]
+        return name.lower()
+
+    def _should_include_author(self, sender_id):
+        if self.allowed_author_ids is None:
+            return True
+        if sender_id is None:
+            return False
+        return sender_id in self.allowed_author_ids
 
     def _get_forum_topics(self, group_id):
         try:

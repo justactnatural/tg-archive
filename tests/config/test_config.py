@@ -18,6 +18,7 @@ class ConfigTests(unittest.TestCase):
                 "api_hash": "2",
                 "download_media": True,
                 "message_ids": [1, 2],
+                "author_ids": [9],
             },
             "groups": [
                 {"name": "A", "group": "group-a"},
@@ -39,6 +40,7 @@ class ConfigTests(unittest.TestCase):
             self.assertFalse(config["groups"][1]["download_media"])
             self.assertEqual(config["groups"][0]["data"], "data/group-a.sqlite")
             self.assertEqual(config["groups"][0]["message_ids"], [1, 2])
+            self.assertEqual(config["groups"][0]["author_ids"], [9])
 
 
 if __name__ == "__main__":
