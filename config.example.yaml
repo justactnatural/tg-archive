@@ -28,6 +28,7 @@ defaults:
   fetch_limit: 0
 
   include_general: true
+  message_ids: []
 
 groups:
   # Each group uses its own DB and media directory.
@@ -38,6 +39,7 @@ groups:
     media_dir: "media/group-a"
     topic_ids: []     # empty = all topics + general
     topic_titles: []  # empty = all topics + general
+    message_ids: []   # empty = all messages
 
 build:
   publish_dir: "site"

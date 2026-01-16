@@ -74,6 +74,10 @@ Titles resolve to IDs at sync time. If multiple topics share a title, you will b
 choose IDs (non-interactive runs should use IDs directly). Messages outside topics will be
 included as "general" when `include_general: true`.
 
+### Message filtering
+To sync only specific messages, set `message_ids` in `config.yaml` or pass `--id`.
+When present, only those message IDs are fetched.
+
 ### Multi-group configs
 For multiple groups, use the `defaults` + `groups` + `build` structure shown in
 `config.example.yaml`. Each group syncs into its own DB and media directory, and the
