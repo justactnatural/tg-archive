@@ -27,6 +27,8 @@ _CONFIG = {
     "topic_titles": [],
     "include_general": True,
     "message_ids": [],
+    "author_ids": [],
+    "author_usernames": [],
     "proxy": {
         "enable": False,
     },
