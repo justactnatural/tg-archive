@@ -7,10 +7,12 @@ import tempfile
 import shutil
 import time
 import re
+import sys
 
 from PIL import Image
 from telethon import TelegramClient, errors, sync
 import telethon.tl.types
+from telethon.tl import functions as tl_functions
 
 from .db import User, Message, Media
 
@@ -38,6 +40,9 @@ class Sync:
         into the local SQLite DB.
         """
 
+        group_id = self._get_group_id(self.config["group"])
+        self._resolve_topic_filter(group_id)
+
         if ids:
             last_id, last_date = (ids, None)
             logging.info("fetching message id={}".format(ids))
@@ -48,8 +53,6 @@ class Sync:
             last_id, last_date = self.db.get_last_message_id()
             logging.info("fetching from last message id={} ({})".format(
                 last_id, last_date))
-
-        group_id = self._get_group_id(self.config["group"])
 
         n = 0
         while True:
@@ -152,6 +155,8 @@ class Sync:
             # Media.
             topic_id = self._get_topic_id(m)
             topic_title = self._get_topic_title(m)
+            if not self._should_include_topic(topic_id):
+                continue
             if topic_title and topic_id:
                 self.db.insert_topic(topic_id, topic_title)
 
@@ -416,6 +421,88 @@ class Sync:
             exit(1)
 
         return entity.id
+
+    def _resolve_topic_filter(self, group_id):
+        self.allowed_topic_ids = None
+        self.include_general = self.config.get("include_general", True)
+
+        topic_ids = self.config.get("topic_ids") or []
+        topic_titles = self.config.get("topic_titles") or []
+        if not topic_ids and not topic_titles:
+            return
+
+        topics = self._get_forum_topics(group_id)
+        resolved = self._resolve_topic_ids(
+            topic_ids=topic_ids,
+            topic_titles=topic_titles,
+            topics=topics,
+            interactive=sys.stdin.isatty(),
+            input_func=input,
+        )
+        self.allowed_topic_ids = set(resolved)
+
+    def _get_forum_topics(self, group_id):
+        try:
+            result = self.client(tl_functions.channels.GetForumTopics(
+                channel=group_id,
+                offset_date=None,
+                offset_id=0,
+                offset_topic=0,
+                limit=100,
+                q=""
+            ))
+        except Exception as e:
+            logging.warning("unable to fetch forum topics: {}".format(e))
+            return []
+
+        topics = []
+        for t in getattr(result, "topics", []):
+            if getattr(t, "title", None) and getattr(t, "id", None):
+                topics.append({"id": t.id, "title": t.title})
+        return topics
+
+    def _resolve_topic_ids(self, topic_ids, topic_titles, topics, interactive, input_func):
+        resolved = set(int(x) for x in topic_ids)
+        if not topic_titles:
+            return list(resolved)
+
+        title_map = {}
+        for t in topics:
+            title_map.setdefault(t["title"].lower(), []).append(t)
+
+        for title in topic_titles:
+            matches = title_map.get(title.lower(), [])
+            if not matches:
+                raise ValueError("topic title not found: {}".format(title))
+            if len(matches) == 1:
+                resolved.add(matches[0]["id"])
+                continue
+
+            if not interactive:
+                raise ValueError("multiple topics share title '{}'; specify topic_ids".format(title))
+
+            logging.info("multiple topics match title '{}':".format(title))
+            for t in matches:
+                logging.info(" - {} (id={})".format(t["title"], t["id"]))
+            choice = input_func("Enter comma-separated topic IDs to include (empty=all): ").strip()
+            if not choice:
+                for t in matches:
+                    resolved.add(t["id"])
+                continue
+            for part in choice.split(","):
+                part = part.strip()
+                if not part:
+                    continue
+                resolved.add(int(part))
+
+        return list(resolved)
+
+    def _should_include_topic(self, topic_id):
+        if self.allowed_topic_ids is None:
+            return True
+        if topic_id is None:
+            return self.include_general
+        return topic_id in self.allowed_topic_ids
 
     def _get_topic_id(self, msg):
         top_id = getattr(msg, "reply_to_top_id", None)

@@ -73,8 +73,7 @@ class DB:
         # Initialize the SQLite DB. If it's new, create the table schema.
         is_new = not os.path.isfile(dbfile)
 
-        self.conn = sqlite3.Connection(
-            dbfile, detect_types=sqlite3.PARSE_DECLTYPES | sqlite3.PARSE_COLNAMES)
+        self.conn = sqlite3.Connection(dbfile)
 
         # Add the custom PAGE() function to get the page number of a row
         # by its row number and a limit multiple.
@@ -124,10 +123,19 @@ class DB:
     def _parse_date(self, d) -> str:
         return datetime.strptime(d, "%Y-%m-%dT%H:%M:%S%z")
 
+    def _parse_sqlite_datetime(self, d):
+        if d is None:
+            return None
+        if isinstance(d, datetime):
+            return d
+        if isinstance(d, bytes):
+            d = d.decode("utf8")
+        return datetime.strptime(d, "%Y-%m-%d %H:%M:%S")
+
     def get_last_message_id(self) -> [int, datetime]:
         cur = self.conn.cursor()
         cur.execute("""
-            SELECT id, strftime('%Y-%m-%d 00:00:00', date) as "[timestamp]" FROM messages
+            SELECT id, strftime('%Y-%m-%d 00:00:00', date) as date_str FROM messages
             ORDER BY id DESC LIMIT 1
         """)
         res = cur.fetchone()
@@ -135,6 +143,10 @@ class DB:
             return 0, None
 
         id, date = res
+        date = self._parse_sqlite_datetime(date) if date else None
+        date = pytz.utc.localize(date) if date else None
+        if self.tz and date:
+            date = date.astimezone(self.tz)
         return id, date
 
     def get_timeline(self) -> Iterator[Month]:
@@ -144,13 +156,14 @@ class DB:
         """
         cur = self.conn.cursor()
         cur.execute("""
-            SELECT strftime('%Y-%m-%d 00:00:00', date) as "[timestamp]",
+            SELECT strftime('%Y-%m-%d 00:00:00', date) as date_str,
             COUNT(*) FROM messages AS count
             GROUP BY strftime('%Y-%m', date) ORDER BY date
         """)
 
         for r in cur.fetchall():
-            date = pytz.utc.localize(r[0])
+            date = self._parse_sqlite_datetime(r[0])
+            date = pytz.utc.localize(date)
             if self.tz:
                 date = date.astimezone(self.tz)
 
@@ -167,16 +180,17 @@ class DB:
         """
         cur = self.conn.cursor()
         cur.execute("""
-            SELECT strftime("%Y-%m-%d 00:00:00", date) AS "[timestamp]",
+            SELECT strftime("%Y-%m-%d 00:00:00", date) AS date_str,
             COUNT(*), PAGE(rank, ?) FROM (
                 SELECT ROW_NUMBER() OVER() as rank, date FROM messages
                 WHERE strftime('%Y%m', date) = ? ORDER BY id
             )
-            GROUP BY "[timestamp]";
+            GROUP BY date_str;
         """, (limit, "{}{:02d}".format(year, month)))
 
         for r in cur.fetchall():
-            date = pytz.utc.localize(r[0])
+            date = self._parse_sqlite_datetime(r[0])
+            date = pytz.utc.localize(date)
             if self.tz:
                 date = date.astimezone(self.tz)
 
@@ -296,6 +310,8 @@ class DB:
                        description=desc,
                        thumb=media_thumb)
 
+        date = self._parse_sqlite_datetime(date)
+        edit_date = self._parse_sqlite_datetime(edit_date)
         date = pytz.utc.localize(date) if date else None
         edit_date = pytz.utc.localize(edit_date) if edit_date else None
 
