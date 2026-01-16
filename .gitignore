@@ -86,6 +86,6 @@ share/python-wheels/
 *.egg
 MANIFEST
 
-# Allow tests/build even though build/ is ignored above.
+# Allow build tests even though build/ is ignored above.
 !tests/build/
 !tests/build/**

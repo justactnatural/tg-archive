@@ -72,6 +72,12 @@ class SyncTopicTests(unittest.TestCase):
         self.assertTrue(s._should_include_topic(1))
         self.assertFalse(s._should_include_topic(2))
 
+    def test_should_exclude_general_when_disabled(self):
+        s = Sync.__new__(Sync)
+        s.allowed_topic_ids = {1}
+        s.include_general = False
+        self.assertFalse(s._should_include_topic(None))
+
 
 if __name__ == "__main__":
     unittest.main()
