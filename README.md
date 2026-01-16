@@ -68,6 +68,12 @@ media_by_topic: true
 Topic grouping uses Telegram forum topics (available on supergroups with topics enabled).
 If your group does not have topics enabled, all media will fall under a single "general" topic.
 
+### Topic filtering
+To sync only specific forum topics, set either `topic_ids` or `topic_titles` in `config.yaml`.
+Titles resolve to IDs at sync time. If multiple topics share a title, you will be prompted to
+choose IDs (non-interactive runs should use IDs directly). Messages outside topics will be
+included as "general" when `include_general: true`.
+
 ### Note
 - The sync can be stopped (Ctrl+C) any time to be resumed later.
 - Setup a cron job to periodically sync messages and re-publish the archive.

@@ -36,6 +36,7 @@ data.sqlite
 *.db
 *.session
 session.session
+*.session-journal
 config.yaml
 
 # Generated site and media
