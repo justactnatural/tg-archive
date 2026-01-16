@@ -5,6 +5,8 @@ __pycache__/
 
 # Distribution / packaging
 build/
+!tests/build/
+!tests/build/**
 dist/
 *.egg-info/
 egg-info/
@@ -81,3 +83,7 @@ share/python-wheels/
 .installed.cfg
 *.egg
 MANIFEST
+
+# Allow build tests even though build/ is ignored above.
+!tests/build/
+!tests/build/**

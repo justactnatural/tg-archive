@@ -55,6 +55,33 @@ class MultiDBTests(unittest.TestCase):
             dayline = list(mdb.get_dayline(2024, 1, limit=10))
             self.assertEqual(len(dayline), 2)
 
+    def test_multidb_media_prefix(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db1 = self._make_db(tmpdir, "g1")
+            user = User(id=1, username="u", first_name=None, last_name=None, tags=[], avatar=None)
+            db1.insert_user(user)
+            msg = Message(
+                id=1,
+                type="message",
+                date=datetime(2024, 1, 1, 12, 0, tzinfo=timezone.utc),
+                edit_date=None,
+                content="hello",
+                reply_to=None,
+                user=user,
+                media=Media(id=1, type="photo", url="v/1.mp4", title="v", description=None, thumb="t.jpg"),
+                topic_id=None,
+                topic_title=None,
+            )
+            db1.insert_media(msg.media)
+            db1.insert_message(msg)
+            db1.commit()
+
+            groups = [{"db": db1, "key": "g1", "media_prefix": "media/g1"}]
+            mdb = MultiDB(groups, tz="UTC")
+            media = list(mdb.get_media_messages())[0].media
+            self.assertEqual(media.url, "media/g1/v/1.mp4")
+            self.assertEqual(media.thumb, "media/g1/t.jpg")
+
 
 if __name__ == "__main__":
     unittest.main()
