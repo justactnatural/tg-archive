@@ -29,6 +29,8 @@ defaults:
 
   include_general: true
   message_ids: []
+  author_ids: []
+  author_usernames: []
 
 groups:
   # Each group uses its own DB and media directory.
@@ -40,6 +42,8 @@ groups:
     topic_ids: []     # empty = all topics + general
     topic_titles: []  # empty = all topics + general
     message_ids: []   # empty = all messages
+    author_ids: []    # empty = all authors
+    author_usernames: []
 
 build:
   publish_dir: "site"
