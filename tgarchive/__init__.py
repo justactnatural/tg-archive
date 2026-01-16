@@ -26,6 +26,7 @@ _CONFIG = {
     "topic_ids": [],
     "topic_titles": [],
     "include_general": True,
+    "message_ids": [],
     "proxy": {
         "enable": False,
     },
@@ -220,7 +221,8 @@ def main():
                 mode
             ))
             s = Sync(group_cfg, args.session, DB(group_cfg.get("data", args.data)))
-            s.sync(args.id, args.from_id)
+            msg_ids = group_cfg.get("message_ids") or args.id
+            s.sync(msg_ids, args.from_id)
             if group_cfg.get("use_takeout", False):
                 s.finish_takeout()
 
