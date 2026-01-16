@@ -23,6 +23,9 @@ _CONFIG = {
     "media_mime_types": [],
     "media_by_topic": False,
     "migrate_media_by_topic": False,
+    "topic_ids": [],
+    "topic_titles": [],
+    "include_general": True,
     "proxy": {
         "enable": False,
     },
