@@ -8,7 +8,7 @@ try:
 except Exception as e:  # pragma: no cover
     raise unittest.SkipTest("missing dependencies: {}".format(e))
 
-from tgarchive.db import DB, MultiDB, Message, User
+from tgarchive.db import DB, Media, Message, MultiDB, User
 
 
 class MultiDBTests(unittest.TestCase):

@@ -224,9 +224,12 @@ def main():
             ))
             s = Sync(group_cfg, args.session, DB(group_cfg.get("data", args.data)))
             msg_ids = group_cfg.get("message_ids") or args.id
-            s.sync(msg_ids, args.from_id)
-            if group_cfg.get("use_takeout", False):
-                s.finish_takeout()
+            try:
+                s.sync(msg_ids, args.from_id)
+            except KeyboardInterrupt:
+                if group_cfg.get("use_takeout", False):
+                    s.finish_takeout()
+                raise
 
         try:
             if cfg.get("groups"):
