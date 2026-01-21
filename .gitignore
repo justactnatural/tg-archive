@@ -89,3 +89,4 @@ MANIFEST
 # Allow build tests even though build/ is ignored above.
 !tests/build/
 !tests/build/**
+tests/build/__pycache__/
