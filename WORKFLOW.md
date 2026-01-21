@@ -7,7 +7,14 @@ This is a minimal zsh workflow to sync the database and build the static site.
 cd /Users/nathanmalitz/Code/tele-rippz/tg-archive
 python3 -m venv .venv
 source .venv/bin/activate
-python3 -m pip install -r requirements.txt
+pip3 install -r requirements.txt
+```
+
+## Run tests
+```zsh
+cd /Users/nathanmalitz/Code/tele-rippz/tg-archive
+source .venv/bin/activate
+python3 -m unittest discover -s tests
 ```
 
 ## Sync the database
