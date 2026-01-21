@@ -385,7 +385,10 @@ class DB:
 class MultiDB:
     def __init__(self, groups, tz=None):
         self.groups = groups
-        self.tz = tz
+        if tz:
+            self.tz = pytz.timezone(tz)
+        else:
+            self.tz = None
 
     def get_last_message_id(self):
         return 0, None
