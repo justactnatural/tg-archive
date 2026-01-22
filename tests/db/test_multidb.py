@@ -16,9 +16,11 @@ class MultiDBTests(unittest.TestCase):
         db_path = os.path.join(base_dir, "{}.sqlite".format(name))
         return DB(db_path)
 
-    def _insert_msg(self, db, msg_id, date):
+    def _insert_msg(self, db, msg_id, date, topic_id=None, topic_title=None):
         user = User(id=1, username="u", first_name=None, last_name=None, tags=[], avatar=None)
         db.insert_user(user)
+        if topic_id and topic_title:
+            db.insert_topic(topic_id, topic_title)
         msg = Message(
             id=msg_id,
             type="message",
@@ -28,8 +30,8 @@ class MultiDBTests(unittest.TestCase):
             reply_to=None,
             user=user,
             media=None,
-            topic_id=None,
-            topic_title=None,
+            topic_id=topic_id,
+            topic_title=topic_title,
         )
         db.insert_message(msg)
         db.commit()
@@ -81,6 +83,22 @@ class MultiDBTests(unittest.TestCase):
             media = list(mdb.get_media_messages())[0].media
             self.assertEqual(media.url, "media/g1/v/1.mp4")
             self.assertEqual(media.thumb, "media/g1/t.jpg")
+
+    def test_multidb_topics_include_group_label(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db1 = self._make_db(tmpdir, "g1")
+            self._insert_msg(db1, 1, datetime(2024, 1, 1, 12, 0, tzinfo=timezone.utc))
+            self._insert_msg(db1, 2, datetime(2024, 1, 1, 13, 0, tzinfo=timezone.utc),
+                             topic_id=9, topic_title="Movies")
+
+            groups = [{"db": db1, "key": "g1", "label": "Group A", "media_prefix": ""}]
+            mdb = MultiDB(groups, tz="UTC")
+            messages = list(mdb.get_messages_page(2024, 1, 0, 10))
+
+            self.assertEqual(messages[0].topic_id, "g1-general")
+            self.assertEqual(messages[0].topic_title, "Group A / General")
+            self.assertEqual(messages[1].topic_id, "g1-9")
+            self.assertEqual(messages[1].topic_title, "Group A / Movies")
 
 
 if __name__ == "__main__":

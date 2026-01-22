@@ -261,6 +261,7 @@ def main():
                 groups.append({
                     "db": db,
                     "key": _slugify(str(g["group"])),
+                    "label": g.get("name") or str(g.get("group")),
                     "media_dir": g["media_dir"],
                     "media_prefix": _media_prefix(g["media_dir"], config.get("media_dir", "media")),
                 })

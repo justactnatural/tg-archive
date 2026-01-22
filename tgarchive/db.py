@@ -458,6 +458,7 @@ class MultiDB:
         out = []
         for m in messages:
             gid = group["key"]
+            label = group.get("label") or gid
             pref_id = "{}-{}".format(gid, m.id)
             pref_reply = "{}-{}".format(gid, m.reply_to) if m.reply_to else None
 
@@ -469,6 +470,14 @@ class MultiDB:
                 if media.thumb:
                     media.thumb = self._with_media_prefix(media.thumb, group)
 
+            if m.topic_id is None:
+                pref_topic_id = "{}-general".format(gid)
+                pref_topic_title = "{} / General".format(label)
+            else:
+                pref_topic_id = "{}-{}".format(gid, m.topic_id)
+                base_title = m.topic_title or "Topic {}".format(m.topic_id)
+                pref_topic_title = "{} / {}".format(label, base_title)
+
             out.append(SimpleNamespace(
                 id=pref_id,
                 type=m.type,
@@ -478,8 +487,8 @@ class MultiDB:
                 reply_to=pref_reply,
                 user=m.user,
                 media=media,
-                topic_id=m.topic_id,
-                topic_title=m.topic_title,
+                topic_id=pref_topic_id,
+                topic_title=pref_topic_title,
             ))
         return out
 
