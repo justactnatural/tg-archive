@@ -44,8 +44,8 @@ class Sync:
         self._resolve_topic_filter(group_id)
 
         if ids:
-            last_id, last_date = (ids, None)
-            logging.info("fetching message id={}".format(ids))
+            last_id, last_date = (0, None)
+            logging.info("fetching message id(s)={}".format(ids))
         elif from_id:
             last_id, last_date = (from_id, None)
             logging.info("fetching from last message id={}".format(last_id))
