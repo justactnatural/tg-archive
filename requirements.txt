@@ -28,5 +28,5 @@ setuptools>=76.0.0
 	# via -r requirements.txt
 six==1.17.0
     # via python-dateutil
-telethon==1.39.0
+telethon==1.42.0
     # via -r requirements.txt
