@@ -4,6 +4,7 @@ import os
 import sqlite3
 from collections import namedtuple
 from datetime import datetime
+import heapq
 import pytz
 from types import SimpleNamespace
 from typing import Iterator
@@ -415,23 +416,44 @@ class MultiDB:
         return total
 
     def get_messages_page(self, year, month, offset=0, limit=500) -> Iterator:
-        messages = []
+        heap = []
+        counter = 0
         for g in self.groups:
-            group_msgs = g["db"].get_messages_all(year, month)
-            messages.extend(self._with_group_prefix(group_msgs, g))
-        messages.sort(key=lambda m: (m.date, m.id))
-        for m in messages[offset:offset + limit]:
-            yield m
+            it = self._iter_group_messages(g, year, month)
+            try:
+                m = next(it)
+            except StopIteration:
+                continue
+            heapq.heappush(heap, (m.date, m.id, counter, m, it))
+            counter += 1
+
+        idx = 0
+        yielded = 0
+        while heap:
+            _, _, _, m, it = heapq.heappop(heap)
+            if idx >= offset:
+                yield m
+                yielded += 1
+                if yielded >= limit:
+                    break
+            idx += 1
+            try:
+                nxt = next(it)
+            except StopIteration:
+                continue
+            heapq.heappush(heap, (nxt.date, nxt.id, counter, nxt, it))
+            counter += 1
 
     def get_dayline(self, year, month, limit=500) -> Iterator[Day]:
-        messages = list(self.get_messages_page(year, month, offset=0, limit=1_000_000_000))
         day_counts = {}
         day_first_index = {}
-        for idx, m in enumerate(messages):
+        idx = 0
+        for m in self.get_messages_page(year, month, offset=0, limit=1_000_000_000):
             day = m.date.strftime("%Y-%m-%d")
             day_counts[day] = day_counts.get(day, 0) + 1
             if day not in day_first_index:
                 day_first_index[day] = idx
+            idx += 1
 
         for day in sorted(day_counts.keys()):
             date = datetime.strptime(day, "%Y-%m-%d")
@@ -457,40 +479,53 @@ class MultiDB:
     def _with_group_prefix(self, messages, group):
         out = []
         for m in messages:
-            gid = group["key"]
-            label = group.get("label") or gid
-            pref_id = "{}-{}".format(gid, m.id)
-            pref_reply = "{}-{}".format(gid, m.reply_to) if m.reply_to else None
-
-            media = m.media
-            if media:
-                media = SimpleNamespace(**media._asdict())
-                if media.url:
-                    media.url = self._with_media_prefix(media.url, group)
-                if media.thumb:
-                    media.thumb = self._with_media_prefix(media.thumb, group)
-
-            if m.topic_id is None:
-                pref_topic_id = "{}-general".format(gid)
-                pref_topic_title = "{} / General".format(label)
-            else:
-                pref_topic_id = "{}-{}".format(gid, m.topic_id)
-                base_title = m.topic_title or "Topic {}".format(m.topic_id)
-                pref_topic_title = "{} / {}".format(label, base_title)
-
-            out.append(SimpleNamespace(
-                id=pref_id,
-                type=m.type,
-                date=m.date,
-                edit_date=m.edit_date,
-                content=m.content,
-                reply_to=pref_reply,
-                user=m.user,
-                media=media,
-                topic_id=pref_topic_id,
-                topic_title=pref_topic_title,
-            ))
+            out.append(self._with_group_prefix_message(m, group))
         return out
+
+    def _with_group_prefix_message(self, m, group):
+        gid = group["key"]
+        label = group.get("label") or gid
+        pref_id = "{}-{}".format(gid, m.id)
+        pref_reply = "{}-{}".format(gid, m.reply_to) if m.reply_to else None
+
+        media = m.media
+        if media:
+            media = SimpleNamespace(**media._asdict())
+            if media.url:
+                media.url = self._with_media_prefix(media.url, group)
+            if media.thumb:
+                media.thumb = self._with_media_prefix(media.thumb, group)
+
+        if m.topic_id is None:
+            pref_topic_id = "{}-general".format(gid)
+            pref_topic_title = "{} / General".format(label)
+        else:
+            pref_topic_id = "{}-{}".format(gid, m.topic_id)
+            base_title = m.topic_title or "Topic {}".format(m.topic_id)
+            pref_topic_title = "{} / {}".format(label, base_title)
+
+        return SimpleNamespace(
+            id=pref_id,
+            type=m.type,
+            date=m.date,
+            edit_date=m.edit_date,
+            content=m.content,
+            reply_to=pref_reply,
+            user=m.user,
+            media=media,
+            topic_id=pref_topic_id,
+            topic_title=pref_topic_title,
+        )
+
+    def _iter_group_messages(self, group, year, month, page_size=500):
+        offset = 0
+        while True:
+            batch = list(group["db"].get_messages_page(year, month, offset, page_size))
+            if not batch:
+                break
+            for m in batch:
+                yield self._with_group_prefix_message(m, group)
+            offset += page_size
 
     def _with_media_prefix(self, path, group):
         base = group["media_prefix"]

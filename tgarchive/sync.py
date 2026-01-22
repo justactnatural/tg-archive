@@ -489,23 +489,41 @@ class Sync:
         return sender_id in self.allowed_author_ids
 
     def _get_forum_topics(self, group_id):
-        try:
-            result = self.client(tl_functions.channels.GetForumTopics(
-                channel=group_id,
-                offset_date=None,
-                offset_id=0,
-                offset_topic=0,
-                limit=100,
-                q=""
-            ))
-        except Exception as e:
-            logging.warning("unable to fetch forum topics: {}".format(e))
-            return []
-
         topics = []
-        for t in getattr(result, "topics", []):
-            if getattr(t, "title", None) and getattr(t, "id", None):
-                topics.append({"id": t.id, "title": t.title})
+        seen = set()
+        offset_topic = 0
+        while True:
+            try:
+                result = self.client(tl_functions.channels.GetForumTopics(
+                    channel=group_id,
+                    offset_date=None,
+                    offset_id=0,
+                    offset_topic=offset_topic,
+                    limit=100,
+                    q=""
+                ))
+            except Exception as e:
+                logging.warning("unable to fetch forum topics: {}".format(e))
+                return topics
+
+            batch = getattr(result, "topics", []) or []
+            for t in batch:
+                tid = getattr(t, "id", None)
+                title = getattr(t, "title", None)
+                if tid is None or title is None:
+                    continue
+                if tid in seen:
+                    continue
+                seen.add(tid)
+                topics.append({"id": tid, "title": title})
+
+            if not batch or len(batch) < 100:
+                break
+            last_id = getattr(batch[-1], "id", None)
+            if not last_id or last_id == offset_topic:
+                break
+            offset_topic = last_id
+
         return topics
 
     def _resolve_topic_ids(self, topic_ids, topic_titles, topics, interactive, input_func):
