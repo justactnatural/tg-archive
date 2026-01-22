@@ -7,10 +7,12 @@ import tempfile
 import shutil
 import time
 import re
+import sys
 
 from PIL import Image
 from telethon import TelegramClient, errors, sync
 import telethon.tl.types
+from telethon.tl import functions as tl_functions
 
 from .db import User, Message, Media
 
@@ -38,6 +40,9 @@ class Sync:
         into the local SQLite DB.
         """
 
+        group_id = self._get_group_id(self.config["group"])
+        self._resolve_topic_filter(group_id)
+
         if ids:
             last_id, last_date = (ids, None)
             logging.info("fetching message id={}".format(ids))
@@ -49,8 +54,7 @@ class Sync:
             logging.info("fetching from last message id={} ({})".format(
                 last_id, last_date))
 
-        group_id = self._get_group_id(self.config["group"])
-
+        self._resolve_author_filter()
         n = 0
         while True:
             has = False
@@ -149,9 +153,15 @@ class Sync:
             if not m:
                 continue
 
+            sender_id = getattr(m, "sender_id", None)
+            if not self._should_include_author(sender_id):
+                continue
+
             # Media.
             topic_id = self._get_topic_id(m)
             topic_title = self._get_topic_title(m)
+            if not self._should_include_topic(topic_id):
+                continue
             if topic_title and topic_id:
                 self.db.insert_topic(topic_id, topic_title)
 
@@ -183,6 +193,7 @@ class Sync:
                 elif isinstance(m.action, telethon.tl.types.MessageActionChatDeleteUser):
                     typ = "user_left"
 
+            user = self._get_user(m.sender, m.chat)
             yield Message(
                 type=typ,
                 id=m.id,
@@ -190,7 +201,7 @@ class Sync:
                 edit_date=m.edit_date,
                 content=sticker if sticker else m.raw_text,
                 reply_to=m.reply_to_msg_id if m.reply_to and m.reply_to.reply_to_msg_id else None,
-                user=self._get_user(m.sender, m.chat),
+                user=user,
                 media=med,
                 topic_id=topic_id,
                 topic_title=topic_title
@@ -416,6 +427,147 @@ class Sync:
             exit(1)
 
         return entity.id
+
+    def _resolve_topic_filter(self, group_id):
+        self.allowed_topic_ids = None
+        self.include_general = self.config.get("include_general", True)
+
+        topic_ids = self.config.get("topic_ids") or []
+        topic_titles = self.config.get("topic_titles") or []
+        if not topic_ids and not topic_titles:
+            return
+
+        topics = self._get_forum_topics(group_id)
+        resolved = self._resolve_topic_ids(
+            topic_ids=topic_ids,
+            topic_titles=topic_titles,
+            topics=topics,
+            interactive=sys.stdin.isatty(),
+            input_func=input,
+        )
+        self.allowed_topic_ids = set(resolved)
+
+    def _resolve_author_filter(self):
+        self.allowed_author_ids = None
+        author_ids = self.config.get("author_ids") or []
+        author_usernames = self.config.get("author_usernames") or []
+        if not author_ids and not author_usernames:
+            return
+
+        resolved = self._resolve_author_ids(
+            author_ids=author_ids,
+            author_usernames=author_usernames,
+            resolve_func=self._resolve_username_to_id
+        )
+        self.allowed_author_ids = set(resolved)
+
+    def _resolve_username_to_id(self, username):
+        entity = self.client.get_entity(username)
+        return entity.id
+
+    def _resolve_author_ids(self, author_ids, author_usernames, resolve_func):
+        resolved = set(int(x) for x in author_ids)
+        for raw in author_usernames:
+            uname = self._normalize_username(raw)
+            try:
+                resolved.add(int(resolve_func(uname)))
+            except Exception:
+                raise ValueError("author username not found: {}".format(raw))
+        return list(resolved)
+
+    def _normalize_username(self, username):
+        name = username.strip()
+        if name.startswith("@"):
+            name = name[1:]
+        return name.lower()
+
+    def _should_include_author(self, sender_id):
+        if self.allowed_author_ids is None:
+            return True
+        if sender_id is None:
+            return False
+        return sender_id in self.allowed_author_ids
+
+    def _get_forum_topics(self, group_id):
+        topics = []
+        seen = set()
+        offset_topic = 0
+        while True:
+            try:
+                result = self.client(tl_functions.channels.GetForumTopics(
+                    channel=group_id,
+                    offset_date=None,
+                    offset_id=0,
+                    offset_topic=offset_topic,
+                    limit=100,
+                    q=""
+                ))
+            except Exception as e:
+                logging.warning("unable to fetch forum topics: {}".format(e))
+                return topics
+
+            batch = getattr(result, "topics", []) or []
+            for t in batch:
+                tid = getattr(t, "id", None)
+                title = getattr(t, "title", None)
+                if tid is None or title is None:
+                    continue
+                if tid in seen:
+                    continue
+                seen.add(tid)
+                topics.append({"id": tid, "title": title})
+
+            if not batch or len(batch) < 100:
+                break
+            last_id = getattr(batch[-1], "id", None)
+            if not last_id or last_id == offset_topic:
+                break
+            offset_topic = last_id
+
+        return topics
+
+    def _resolve_topic_ids(self, topic_ids, topic_titles, topics, interactive, input_func):
+        resolved = set(int(x) for x in topic_ids)
+        if not topic_titles:
+            return list(resolved)
+
+        title_map = {}
+        for t in topics:
+            title_map.setdefault(t["title"].lower(), []).append(t)
+
+        for title in topic_titles:
+            matches = title_map.get(title.lower(), [])
+            if not matches:
+                raise ValueError("topic title not found: {}".format(title))
+            if len(matches) == 1:
+                resolved.add(matches[0]["id"])
+                continue
+
+            if not interactive:
+                raise ValueError("multiple topics share title '{}'; specify topic_ids".format(title))
+
+            logging.info("multiple topics match title '{}':".format(title))
+            for t in matches:
+                logging.info(" - {} (id={})".format(t["title"], t["id"]))
+            choice = input_func("Enter comma-separated topic IDs to include (empty=all): ").strip()
+            if not choice:
+                for t in matches:
+                    resolved.add(t["id"])
+                continue
+            for part in choice.split(","):
+                part = part.strip()
+                if not part:
+                    continue
+                resolved.add(int(part))
+
+        return list(resolved)
+
+    def _should_include_topic(self, topic_id):
+        if self.allowed_topic_ids is None:
+            return True
+        if topic_id is None:
+            return self.include_general
+        return topic_id in self.allowed_topic_ids
 
     def _get_topic_id(self, msg):
         top_id = getattr(msg, "reply_to_top_id", None)

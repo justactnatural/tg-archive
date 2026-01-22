@@ -5,6 +5,8 @@ __pycache__/
 
 # Distribution / packaging
 build/
+!tests/build/
+!tests/build/**
 dist/
 *.egg-info/
 egg-info/
@@ -32,10 +34,12 @@ htmlcov/
 
 # SQLite DBs and session files
 *.sqlite
+*.sqlite-journal
 data.sqlite
 *.db
 *.session
 session.session
+*.session-journal
 config.yaml
 
 # Generated site and media
@@ -81,3 +85,8 @@ share/python-wheels/
 .installed.cfg
 *.egg
 MANIFEST
+
+# Allow build tests even though build/ is ignored above.
+!tests/build/
+!tests/build/**
+tests/build/__pycache__/

@@ -4,7 +4,9 @@ import os
 import sqlite3
 from collections import namedtuple
 from datetime import datetime
+import heapq
 import pytz
+from types import SimpleNamespace
 from typing import Iterator
 
 schema = """
@@ -73,8 +75,7 @@ class DB:
         # Initialize the SQLite DB. If it's new, create the table schema.
         is_new = not os.path.isfile(dbfile)
 
-        self.conn = sqlite3.Connection(
-            dbfile, detect_types=sqlite3.PARSE_DECLTYPES | sqlite3.PARSE_COLNAMES)
+        self.conn = sqlite3.Connection(dbfile)
 
         # Add the custom PAGE() function to get the page number of a row
         # by its row number and a limit multiple.
@@ -124,10 +125,19 @@ class DB:
     def _parse_date(self, d) -> str:
         return datetime.strptime(d, "%Y-%m-%dT%H:%M:%S%z")
 
+    def _parse_sqlite_datetime(self, d):
+        if d is None:
+            return None
+        if isinstance(d, datetime):
+            return d
+        if isinstance(d, bytes):
+            d = d.decode("utf8")
+        return datetime.strptime(d, "%Y-%m-%d %H:%M:%S")
+
     def get_last_message_id(self) -> [int, datetime]:
         cur = self.conn.cursor()
         cur.execute("""
-            SELECT id, strftime('%Y-%m-%d 00:00:00', date) as "[timestamp]" FROM messages
+            SELECT id, strftime('%Y-%m-%d 00:00:00', date) as date_str FROM messages
             ORDER BY id DESC LIMIT 1
         """)
         res = cur.fetchone()
@@ -135,6 +145,10 @@ class DB:
             return 0, None
 
         id, date = res
+        date = self._parse_sqlite_datetime(date) if date else None
+        date = pytz.utc.localize(date) if date else None
+        if self.tz and date:
+            date = date.astimezone(self.tz)
         return id, date
 
     def get_timeline(self) -> Iterator[Month]:
@@ -144,13 +158,14 @@ class DB:
         """
         cur = self.conn.cursor()
         cur.execute("""
-            SELECT strftime('%Y-%m-%d 00:00:00', date) as "[timestamp]",
+            SELECT strftime('%Y-%m-%d 00:00:00', date) as date_str,
             COUNT(*) FROM messages AS count
             GROUP BY strftime('%Y-%m', date) ORDER BY date
         """)
 
         for r in cur.fetchall():
-            date = pytz.utc.localize(r[0])
+            date = self._parse_sqlite_datetime(r[0])
+            date = pytz.utc.localize(date)
             if self.tz:
                 date = date.astimezone(self.tz)
 
@@ -167,16 +182,17 @@ class DB:
         """
         cur = self.conn.cursor()
         cur.execute("""
-            SELECT strftime("%Y-%m-%d 00:00:00", date) AS "[timestamp]",
+            SELECT strftime("%Y-%m-%d 00:00:00", date) AS date_str,
             COUNT(*), PAGE(rank, ?) FROM (
                 SELECT ROW_NUMBER() OVER() as rank, date FROM messages
                 WHERE strftime('%Y%m', date) = ? ORDER BY id
             )
-            GROUP BY "[timestamp]";
+            GROUP BY date_str;
         """, (limit, "{}{:02d}".format(year, month)))
 
         for r in cur.fetchall():
-            date = pytz.utc.localize(r[0])
+            date = self._parse_sqlite_datetime(r[0])
+            date = pytz.utc.localize(date)
             if self.tz:
                 date = date.astimezone(self.tz)
 
@@ -204,6 +220,28 @@ class DB:
             WHERE strftime('%Y%m', date) = ?
             AND messages.id > ? ORDER by messages.id LIMIT ?
             """, (date, last_id, limit))
+
+        for r in cur.fetchall():
+            yield self._make_message(r)
+
+    def get_messages_page(self, year, month, offset=0, limit=500) -> Iterator[Message]:
+        date = "{}{:02d}".format(year, month)
+
+        cur = self.conn.cursor()
+        cur.execute("""
+            SELECT messages.id, messages.type, messages.date, messages.edit_date,
+            messages.content, messages.reply_to, messages.topic_id,
+            messages.user_id,
+            users.username, users.first_name, users.last_name, users.tags, users.avatar,
+            media.id, media.type, media.url, media.title, media.description, media.thumb,
+            topics.title
+            FROM messages
+            LEFT JOIN users ON (users.id = messages.user_id)
+            LEFT JOIN media ON (media.id = messages.media_id)
+            LEFT JOIN topics ON (topics.id = messages.topic_id)
+            WHERE strftime('%Y%m', date) = ?
+            ORDER by messages.id LIMIT ? OFFSET ?
+            """, (date, limit, offset))
 
         for r in cur.fetchall():
             yield self._make_message(r)
@@ -296,6 +334,8 @@ class DB:
                        description=desc,
                        thumb=media_thumb)
 
+        date = self._parse_sqlite_datetime(date)
+        edit_date = self._parse_sqlite_datetime(edit_date)
         date = pytz.utc.localize(date) if date else None
         edit_date = pytz.utc.localize(edit_date) if edit_date else None
 
@@ -338,3 +378,157 @@ class DB:
 
         for r in cur.fetchall():
             yield self._make_message(r)
+
+    def get_messages_all(self, year, month) -> list[Message]:
+        return list(self.get_messages_page(year, month, offset=0, limit=1_000_000_000))
+
+
+class MultiDB:
+    def __init__(self, groups, tz=None):
+        self.groups = groups
+        if tz:
+            self.tz = pytz.timezone(tz)
+        else:
+            self.tz = None
+
+    def get_last_message_id(self):
+        return 0, None
+
+    def get_timeline(self) -> Iterator[Month]:
+        counts = {}
+        for g in self.groups:
+            for m in g["db"].get_timeline():
+                key = m.slug
+                if key not in counts:
+                    counts[key] = {"date": m.date, "count": 0}
+                counts[key]["count"] += m.count
+        for slug in sorted(counts.keys()):
+            date = counts[slug]["date"]
+            yield Month(date=date,
+                        slug=slug,
+                        label=date.strftime("%b %Y"),
+                        count=counts[slug]["count"])
+
+    def get_message_count(self, year, month) -> int:
+        total = 0
+        for g in self.groups:
+            total += g["db"].get_message_count(year, month)
+        return total
+
+    def get_messages_page(self, year, month, offset=0, limit=500) -> Iterator:
+        heap = []
+        counter = 0
+        for g in self.groups:
+            it = self._iter_group_messages(g, year, month)
+            try:
+                m = next(it)
+            except StopIteration:
+                continue
+            heapq.heappush(heap, (m.date, m.id, counter, m, it))
+            counter += 1
+
+        idx = 0
+        yielded = 0
+        while heap:
+            _, _, _, m, it = heapq.heappop(heap)
+            if idx >= offset:
+                yield m
+                yielded += 1
+                if yielded >= limit:
+                    break
+            idx += 1
+            try:
+                nxt = next(it)
+            except StopIteration:
+                continue
+            heapq.heappush(heap, (nxt.date, nxt.id, counter, nxt, it))
+            counter += 1
+
+    def get_dayline(self, year, month, limit=500) -> Iterator[Day]:
+        day_counts = {}
+        day_first_index = {}
+        idx = 0
+        for m in self.get_messages_page(year, month, offset=0, limit=1_000_000_000):
+            day = m.date.strftime("%Y-%m-%d")
+            day_counts[day] = day_counts.get(day, 0) + 1
+            if day not in day_first_index:
+                day_first_index[day] = idx
+            idx += 1
+
+        for day in sorted(day_counts.keys()):
+            date = datetime.strptime(day, "%Y-%m-%d")
+            date = pytz.utc.localize(date)
+            if self.tz:
+                date = date.astimezone(self.tz)
+            page = int(day_first_index[day] / limit) + 1
+            yield Day(date=date,
+                      slug=day,
+                      label=date.strftime("%d %b %Y"),
+                      count=day_counts[day],
+                      page=page)
+
+    def get_media_messages(self) -> Iterator:
+        messages = []
+        for g in self.groups:
+            group_msgs = list(g["db"].get_media_messages())
+            messages.extend(self._with_group_prefix(group_msgs, g))
+        messages.sort(key=lambda m: (m.date, m.id))
+        for m in messages:
+            yield m
+
+    def _with_group_prefix(self, messages, group):
+        out = []
+        for m in messages:
+            out.append(self._with_group_prefix_message(m, group))
+        return out
+
+    def _with_group_prefix_message(self, m, group):
+        gid = group["key"]
+        label = group.get("label") or gid
+        pref_id = "{}-{}".format(gid, m.id)
+        pref_reply = "{}-{}".format(gid, m.reply_to) if m.reply_to else None
+
+        media = m.media
+        if media:
+            media = SimpleNamespace(**media._asdict())
+            if media.url:
+                media.url = self._with_media_prefix(media.url, group)
+            if media.thumb:
+                media.thumb = self._with_media_prefix(media.thumb, group)
+
+        if m.topic_id is None:
+            pref_topic_id = "{}-general".format(gid)
+            pref_topic_title = "{} / General".format(label)
+        else:
+            pref_topic_id = "{}-{}".format(gid, m.topic_id)
+            base_title = m.topic_title or "Topic {}".format(m.topic_id)
+            pref_topic_title = "{} / {}".format(label, base_title)
+
+        return SimpleNamespace(
+            id=pref_id,
+            type=m.type,
+            date=m.date,
+            edit_date=m.edit_date,
+            content=m.content,
+            reply_to=pref_reply,
+            user=m.user,
+            media=media,
+            topic_id=pref_topic_id,
+            topic_title=pref_topic_title,
+        )
+
+    def _iter_group_messages(self, group, year, month, page_size=500):
+        offset = 0
+        while True:
+            batch = list(group["db"].get_messages_page(year, month, offset, page_size))
+            if not batch:
+                break
+            for m in batch:
+                yield self._with_group_prefix_message(m, group)
+            offset += page_size
+
+    def _with_media_prefix(self, path, group):
+        base = group["media_prefix"]
+        if not base:
+            return path
+        return "{}/{}".format(base, path)

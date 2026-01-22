@@ -23,6 +23,12 @@ _CONFIG = {
     "media_mime_types": [],
     "media_by_topic": False,
     "migrate_media_by_topic": False,
+    "topic_ids": [],
+    "topic_titles": [],
+    "include_general": True,
+    "message_ids": [],
+    "author_ids": [],
+    "author_usernames": [],
     "proxy": {
         "enable": False,
     },
@@ -49,12 +55,70 @@ _CONFIG = {
     "publish_media_hashtags": True
 }
 
+def _merge_dict(base, override):
+    out = dict(base)
+    for k, v in (override or {}).items():
+        if isinstance(v, dict) and isinstance(out.get(k), dict):
+            out[k] = _merge_dict(out[k], v)
+        else:
+            out[k] = v
+    return out
+
+
+def _slugify(s):
+    out = []
+    for ch in s.lower():
+        if ch.isalnum():
+            out.append(ch)
+        elif ch in ("-", "_"):
+            out.append(ch)
+        else:
+            out.append("-")
+    slug = "".join(out).strip("-")
+    return slug or "group"
+
+
+def _media_prefix(media_dir, media_root):
+    if not media_dir:
+        return ""
+    if os.path.isabs(media_dir):
+        return os.path.basename(media_dir)
+    if not media_root:
+        return media_dir
+    try:
+        rel = os.path.relpath(media_dir, media_root)
+    except ValueError:
+        return os.path.basename(media_dir)
+    return rel if rel != "." else ""
+
 
 def get_config(path):
-    config = {}
     with open(path, "r") as f:
-        config = {**_CONFIG, **yaml.safe_load(f.read())}
-    return config
+        raw = yaml.safe_load(f.read()) or {}
+
+    if "groups" not in raw:
+        return _merge_dict(_CONFIG, raw)
+
+    defaults = raw.get("defaults", {})
+    groups = []
+    for g in raw.get("groups", []):
+        merged = _merge_dict(_merge_dict(_CONFIG, defaults), g)
+        if not merged.get("group"):
+            raise ValueError("group is required for each entry in groups")
+        if not merged.get("data"):
+            merged["data"] = os.path.join("data", "{}.sqlite".format(_slugify(str(merged["group"]))))
+        if not merged.get("media_dir"):
+            merged["media_dir"] = os.path.join("media", _slugify(str(merged["group"])))
+        groups.append(merged)
+
+    build_cfg = _merge_dict(_CONFIG, raw.get("build", {}))
+    build_cfg["groups"] = groups
+    if not build_cfg.get("group"):
+        build_cfg["group"] = raw.get("group_label", "multiple")
+    build_cfg["telegram_url"] = raw.get("telegram_url", build_cfg["telegram_url"])
+    build_cfg["show_sender_fullname"] = raw.get("show_sender_fullname", build_cfg["show_sender_fullname"])
+    build_cfg["timezone"] = raw.get("timezone", build_cfg["timezone"])
+    return build_cfg
 
 
 def main():
@@ -148,18 +212,33 @@ def main():
             sys.exit(1)
 
         cfg = get_config(args.config)
-        mode = "takeout" if cfg.get("use_takeout", False) else "standard"
 
-        logging.info("starting Telegram sync (batch_size={}, limit={}, wait={}, mode={})".format(
-            cfg["fetch_batch_size"], cfg["fetch_limit"], cfg["fetch_wait"], mode
-        ))
+        def run_sync(group_cfg):
+            mode = "takeout" if group_cfg.get("use_takeout", False) else "standard"
+            logging.info("starting Telegram sync (group={}, batch_size={}, limit={}, wait={}, mode={})".format(
+                group_cfg.get("group"),
+                group_cfg["fetch_batch_size"],
+                group_cfg["fetch_limit"],
+                group_cfg["fetch_wait"],
+                mode
+            ))
+            s = Sync(group_cfg, args.session, DB(group_cfg.get("data", args.data)))
+            msg_ids = group_cfg.get("message_ids") or args.id
+            try:
+                s.sync(msg_ids, args.from_id)
+            except KeyboardInterrupt:
+                if group_cfg.get("use_takeout", False):
+                    s.finish_takeout()
+                raise
+
         try:
-            s = Sync(cfg, args.session, DB(args.data))
-            s.sync(args.id, args.from_id)
+            if cfg.get("groups"):
+                for g in cfg["groups"]:
+                    run_sync(g)
+            else:
+                run_sync(cfg)
         except KeyboardInterrupt as e:
             logging.info("sync cancelled manually")
-            if cfg.get("use_takeout", False):
-                s.finish_takeout()
             sys.exit()
         except:
             raise
@@ -167,13 +246,29 @@ def main():
     # Build static site.
     elif args.build:
         from .build import Build
+        from .db import MultiDB
 
         logging.info("building site")
         config = get_config(args.config)
         if args.migrate_media:
             config["migrate_media_by_topic"] = True
             config["media_by_topic"] = True
-        b = Build(config, DB(args.data, config["timezone"]), args.symlink)
+
+        if config.get("groups"):
+            groups = []
+            for g in config["groups"]:
+                db = DB(g["data"], g.get("timezone", config.get("timezone")))
+                groups.append({
+                    "db": db,
+                    "key": _slugify(str(g["group"])),
+                    "label": g.get("name") or str(g.get("group")),
+                    "media_dir": g["media_dir"],
+                    "media_prefix": _media_prefix(g["media_dir"], config.get("media_dir", "media")),
+                })
+            config["media_dirs"] = [g["media_dir"] for g in config["groups"]]
+            b = Build(config, MultiDB(groups, config.get("timezone")), args.symlink)
+        else:
+            b = Build(config, DB(args.data, config["timezone"]), args.symlink)
         b.load_template(args.template)
         if args.rss_template:
             b.load_rss_template(args.rss_template)

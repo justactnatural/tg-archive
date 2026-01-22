@@ -73,22 +73,17 @@ class Build:
                 dayline[d.slug] = d
 
             # Paginate and fetch messages for the month until the end..
-            page = 0
-            last_id = 0
             total = self.db.get_message_count(
                 month.date.year, month.date.month)
             total_pages = math.ceil(total / self.config["per_page"])
 
-            while True:
-                messages = list(self.db.get_messages(month.date.year, month.date.month,
-                                                     last_id, self.config["per_page"]))
+            for page in range(1, total_pages + 1):
+                offset = (page - 1) * self.config["per_page"]
+                messages = list(self.db.get_messages_page(month.date.year, month.date.month,
+                                                         offset, self.config["per_page"]))
 
                 if len(messages) == 0:
-                    break
-
-                last_id = messages[-1].id
-
-                page += 1
+                    continue
                 fname = self.make_filename(month, page)
 
                 # Collect the message ID -> page name for all messages in the set
@@ -172,8 +167,10 @@ class Build:
 
             media_mime = ""
             if m.media and m.media.url:
-                murl = "{}/{}/{}".format(self.config["site_url"],
-                                         os.path.basename(self.config["media_dir"]), m.media.url)
+                media_root = self.config["media_dir"]
+                if os.path.isabs(media_root):
+                    media_root = os.path.basename(media_root)
+                murl = "{}/{}/{}".format(self.config["site_url"], media_root, m.media.url)
                 media_path = "{}/{}".format(self.config["media_dir"], m.media.url)
                 media_mime = "application/octet-stream"
                 media_size = 0
@@ -449,14 +446,27 @@ class Build:
                 shutil.copytree(f, target)
 
         # If media downloading is enabled, copy/symlink the media directory.
-        mediadir = self.config["media_dir"]
-        if os.path.exists(mediadir):
-            if self.symlink:
-                self._relative_symlink(os.path.abspath(mediadir), os.path.join(
-                    pubdir, os.path.basename(mediadir)))
-            else:
-                shutil.copytree(mediadir, os.path.join(
-                    pubdir, os.path.basename(mediadir)))
+        mediadirs = self.config.get("media_dirs")
+        if mediadirs:
+            for mediadir in mediadirs:
+                target = mediadir
+                if os.path.isabs(mediadir):
+                    target = os.path.basename(mediadir)
+                target = os.path.join(pubdir, target)
+                if os.path.exists(mediadir):
+                    if self.symlink:
+                        self._relative_symlink(os.path.abspath(mediadir), target)
+                    else:
+                        shutil.copytree(mediadir, target)
+        else:
+            mediadir = self.config["media_dir"]
+            if os.path.exists(mediadir):
+                if self.symlink:
+                    self._relative_symlink(os.path.abspath(mediadir), os.path.join(
+                        pubdir, os.path.basename(mediadir)))
+                else:
+                    shutil.copytree(mediadir, os.path.join(
+                        pubdir, os.path.basename(mediadir)))
 
     def _relative_symlink(self, src, dst):
         dir_path = os.path.dirname(dst)
