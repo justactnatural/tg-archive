@@ -34,6 +34,7 @@ python3 -m tgarchive --build \
   --media-template /Users/nathanmalitz/Code/tele-rippz/tg-archive/tgarchive/example/media_template.html \
   --migrate-media
 ```
+Note: both `--template` and `--media-template` are required.
 
 ## Build without migration (routine rebuilds)
 ```zsh

@@ -438,6 +438,9 @@ class Sync:
             return
 
         topics = self._get_forum_topics(group_id)
+        if not topics and topic_titles:
+            logging.warning("unable to resolve topic titles; skipping topic filtering")
+            return
         resolved = self._resolve_topic_ids(
             topic_ids=topic_ids,
             topic_titles=topic_titles,
@@ -492,9 +495,16 @@ class Sync:
         topics = []
         seen = set()
         offset_topic = 0
+        get_topics = getattr(tl_functions.channels, "GetForumTopics", None)
+        if get_topics is None:
+            get_topics = getattr(tl_functions.channels, "GetForumTopicsRequest", None)
+        if get_topics is None:
+            logging.warning("unable to fetch forum topics: GetForumTopics not available")
+            return topics
+
         while True:
             try:
-                result = self.client(tl_functions.channels.GetForumTopics(
+                result = self.client(get_topics(
                     channel=group_id,
                     offset_date=None,
                     offset_id=0,
