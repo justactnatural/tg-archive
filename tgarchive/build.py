@@ -437,7 +437,10 @@ class Build:
 
         # Copy the static directory into the output directory.
         for f in [self.config["static_dir"]]:
-            target = os.path.join(pubdir, f)
+            target = f
+            if os.path.isabs(f):
+                target = os.path.basename(f)
+            target = os.path.join(pubdir, target)
             if self.symlink:
                 self._relative_symlink(os.path.abspath(f), target)
             elif os.path.isfile(f):

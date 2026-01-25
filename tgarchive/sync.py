@@ -327,11 +327,12 @@ class Sync:
                 logging.info("downloading media #{}".format(msg.id))
                 try:
                     basename, fname, thumb = self._download_media(msg, topic_dir)
+                    title = msg.raw_text.strip() if getattr(msg, "raw_text", None) else basename
                     return Media(
                         id=msg.id,
                         type="photo",
                         url=fname,
-                        title=basename,
+                        title=title,
                         description=None,
                         thumb=thumb
                     )
@@ -349,6 +350,10 @@ class Sync:
         # filename before the download.
         fpath = self.client.download_media(msg, file=tempfile.gettempdir())
         basename = os.path.basename(fpath)
+        if hasattr(msg, "file"):
+            file_name = getattr(msg.file, "name", None)
+            if isinstance(file_name, str) and file_name:
+                basename = file_name
 
         newname = "{}.{}".format(msg.id, self._get_file_ext(basename))
         dest_dir = os.path.join(self.config["media_dir"], topic_dir) if topic_dir else self.config["media_dir"]

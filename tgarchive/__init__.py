@@ -97,7 +97,12 @@ def get_config(path):
         raw = yaml.safe_load(f.read()) or {}
 
     if "groups" not in raw:
-        return _merge_dict(_CONFIG, raw)
+        merged = _merge_dict(_CONFIG, raw)
+        if "media_dir" not in raw and merged.get("group"):
+            merged["media_dir"] = os.path.join("media", _slugify(str(merged["group"])))
+        if (merged.get("topic_ids") or merged.get("topic_titles")) and not merged.get("media_by_topic", False):
+            merged["media_by_topic"] = True
+        return merged
 
     defaults = raw.get("defaults", {})
     groups = []
@@ -109,6 +114,8 @@ def get_config(path):
             merged["data"] = os.path.join("data", "{}.sqlite".format(_slugify(str(merged["group"]))))
         if not merged.get("media_dir"):
             merged["media_dir"] = os.path.join("media", _slugify(str(merged["group"])))
+        if (merged.get("topic_ids") or merged.get("topic_titles")) and not merged.get("media_by_topic", False):
+            merged["media_by_topic"] = True
         groups.append(merged)
 
     build_cfg = _merge_dict(_CONFIG, raw.get("build", {}))
