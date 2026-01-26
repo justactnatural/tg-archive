@@ -410,10 +410,22 @@ class Build:
         return new_rel
 
     def _topic_dir(self, topic_id, topic_title):
+        if topic_title:
+            if not hasattr(self, "_topic_dir_cache"):
+                self._topic_dir_cache = {}
+                self._topic_dir_used = {}
+            if topic_id in self._topic_dir_cache:
+                return self._topic_dir_cache[topic_id]
+            slug = self._slugify(topic_title, topic_id)
+            if topic_id is not None:
+                existing = self._topic_dir_used.get(slug)
+                if existing is not None and existing != topic_id:
+                    slug = "{}-{}".format(slug, topic_id)
+                self._topic_dir_used[slug] = topic_id
+                self._topic_dir_cache[topic_id] = slug
+            return slug
         if topic_id:
             return "topic-{}".format(topic_id)
-        if topic_title:
-            return self._slugify(topic_title, None)
         return "general"
 
     def _slugify(self, text, topic_id=None):

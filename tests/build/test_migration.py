@@ -69,13 +69,13 @@ class BuildMigrationTests(unittest.TestCase):
             b = Build(config, db, symlink=False)
             b._migrate_media_by_topic()
 
-            new_path = os.path.join(media_dir, "topic-55", "100.jpg")
-            new_thumb = os.path.join(media_dir, "topic-55", "thumb_100.jpg")
+            new_path = os.path.join(media_dir, "photos", "100.jpg")
+            new_thumb = os.path.join(media_dir, "photos", "thumb_100.jpg")
             self.assertTrue(os.path.exists(new_path))
             self.assertTrue(os.path.exists(new_thumb))
-            self.assertEqual(db.updated[-1][1], "topic-55/100.jpg")
+            self.assertEqual(db.updated[-1][1], "photos/100.jpg")
 
-    def test_topic_dir_uses_id(self):
+    def test_topic_dir_uses_title(self):
         config = {
             "publish_dir": "site",
             "media_pages_dir": "media-pages",
@@ -83,7 +83,7 @@ class BuildMigrationTests(unittest.TestCase):
             "media_dir": "media",
         }
         b = Build(config, MigrationDB([]), symlink=False)
-        self.assertEqual(b._topic_dir(123, "Photos!"), "topic-123")
+        self.assertEqual(b._topic_dir(123, "Photos!"), "photos")
 
 
 if __name__ == "__main__":

@@ -15,10 +15,11 @@ class SyncTopicTests(unittest.TestCase):
         self.assertEqual(s._slugify("!!!", topic_id=7), "topic-7")
         self.assertEqual(s._slugify("Photos!", topic_id=7), "photos")
 
-    def test_get_topic_dir_prefers_id(self):
+    def test_get_topic_dir_prefers_title(self):
         s = Sync.__new__(Sync)
         s.config = {"media_by_topic": True}
         self.assertEqual(s._get_topic_dir(5, "😀"), "topic-5")
+        self.assertEqual(s._get_topic_dir(6, "Photos!"), "photos")
 
     def test_get_topic_id_from_reply_to(self):
         class ReplyTo:
