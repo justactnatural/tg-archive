@@ -42,6 +42,7 @@ class Sync:
 
         group_id = self._get_group_id(self.config["group"])
         self._resolve_topic_filter(group_id)
+        self._load_topic_map(group_id)
 
         if ids:
             last_id, last_date = (0, None)
@@ -455,6 +456,12 @@ class Sync:
         )
         self.allowed_topic_ids = set(resolved)
 
+    def _load_topic_map(self, group_id):
+        if not self.config.get("media_by_topic", False):
+            return
+        topics = self._get_forum_topics(group_id)
+        self.topic_id_map = {t["id"]: t["title"] for t in topics}
+
     def _resolve_author_filter(self):
         self.allowed_author_ids = None
         author_ids = self.config.get("author_ids") or []
@@ -610,6 +617,10 @@ class Sync:
         forum_topic = getattr(msg, "forum_topic", None)
         if forum_topic and getattr(forum_topic, "title", None):
             return forum_topic.title
+        if getattr(self, "topic_id_map", None):
+            topic_id = self._get_topic_id(msg)
+            if topic_id in self.topic_id_map:
+                return self.topic_id_map[topic_id]
         return None
 
     def _get_topic_dir(self, topic_id, topic_title):
