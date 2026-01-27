@@ -510,7 +510,7 @@ class Sync:
         while True:
             try:
                 result = self.client(get_topics(
-                    channel=group_id,
+                    peer=group_id,
                     offset_date=None,
                     offset_id=0,
                     offset_topic=offset_topic,

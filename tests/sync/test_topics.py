@@ -1,4 +1,5 @@
 import unittest
+from unittest.mock import patch
 
 try:
     import yaml  # noqa: F401
@@ -6,6 +7,7 @@ try:
 except Exception as e:  # pragma: no cover
     raise unittest.SkipTest("missing dependencies: {}".format(e))
 
+import tgarchive.sync as syncmod
 from tgarchive.sync import Sync
 
 
@@ -77,6 +79,30 @@ class SyncTopicTests(unittest.TestCase):
         s.allowed_topic_ids = {1}
         s.include_general = False
         self.assertFalse(s._should_include_topic(None))
+
+    def test_get_forum_topics_uses_peer_argument(self):
+        s = Sync.__new__(Sync)
+        def fake_client(req):
+            self.assertIn("peer", req)
+            self.assertNotIn("channel", req)
+            return type(
+                "Result",
+                (),
+                {"topics": [type("Topic", (), {"id": 1, "title": "Movies"})()]},
+            )()
+
+        s.client = fake_client
+
+        with patch.object(syncmod.tl_functions.channels, "GetForumTopics", None, create=True), patch.object(
+            syncmod.tl_functions.channels, "GetForumTopicsRequest", None, create=True
+        ), patch.object(
+            syncmod.tl_functions.messages,
+            "GetForumTopicsRequest",
+            lambda **kwargs: kwargs,
+        ):
+            topics = s._get_forum_topics(123)
+
+        self.assertEqual(topics, [{"id": 1, "title": "Movies"}])
 
 
 if __name__ == "__main__":

@@ -36,6 +36,7 @@ htmlcov/
 *.sqlite
 *.sqlite-journal
 data.sqlite
+data.sqlite*
 *.db
 *.session
 session.session
