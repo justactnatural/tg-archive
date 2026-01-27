@@ -93,14 +93,20 @@ class SyncTopicTests(unittest.TestCase):
 
         s.client = fake_client
 
-        with patch.object(syncmod.tl_functions.channels, "GetForumTopics", None, create=True), patch.object(
-            syncmod.tl_functions.channels, "GetForumTopicsRequest", None, create=True
-        ), patch.object(
-            syncmod.tl_functions.messages,
-            "GetForumTopicsRequest",
-            lambda **kwargs: kwargs,
-        ):
+        ch = syncmod.tl_functions.channels
+        had_req = hasattr(ch, "GetForumTopicsRequest")
+        old_req = getattr(ch, "GetForumTopicsRequest", None)
+        setattr(ch, "GetForumTopicsRequest", lambda **kwargs: kwargs)
+        try:
             topics = s._get_forum_topics(123)
+        finally:
+            if had_req:
+                setattr(ch, "GetForumTopicsRequest", old_req)
+            else:
+                try:
+                    delattr(ch, "GetForumTopicsRequest")
+                except AttributeError:
+                    pass
 
         self.assertEqual(topics, [{"id": 1, "title": "Movies"}])
 

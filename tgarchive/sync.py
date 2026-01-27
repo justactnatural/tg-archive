@@ -442,6 +442,11 @@ class Sync:
         if not topic_ids and not topic_titles:
             return
 
+        logging.warning(
+            "topic filtering is disabled in sync; proceeding with full-group sync and post-sync organization"
+        )
+        return
+
         topics = self._get_forum_topics(group_id)
         if not topics and topic_titles:
             logging.warning("unable to resolve topic titles; skipping topic filtering")

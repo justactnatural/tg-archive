@@ -222,6 +222,7 @@ def main():
 
         def run_sync(group_cfg):
             mode = "takeout" if group_cfg.get("use_takeout", False) else "standard"
+            db_path = group_cfg.get("data", args.data)
             logging.info("starting Telegram sync (group={}, batch_size={}, limit={}, wait={}, mode={})".format(
                 group_cfg.get("group"),
                 group_cfg["fetch_batch_size"],
@@ -229,7 +230,8 @@ def main():
                 group_cfg["fetch_wait"],
                 mode
             ))
-            s = Sync(group_cfg, args.session, DB(group_cfg.get("data", args.data)))
+            logging.info("using sqlite db: {}".format(db_path))
+            s = Sync(group_cfg, args.session, DB(db_path))
             msg_ids = group_cfg.get("message_ids") or args.id
             try:
                 s.sync(msg_ids, args.from_id)
@@ -275,7 +277,9 @@ def main():
             config["media_dirs"] = [g["media_dir"] for g in config["groups"]]
             b = Build(config, MultiDB(groups, config.get("timezone")), args.symlink)
         else:
-            b = Build(config, DB(args.data, config["timezone"]), args.symlink)
+            db_path = config.get("data", args.data)
+            logging.info("using sqlite db: {}".format(db_path))
+            b = Build(config, DB(db_path, config["timezone"]), args.symlink)
         b.load_template(args.template)
         if args.rss_template:
             b.load_rss_template(args.rss_template)

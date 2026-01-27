@@ -410,10 +410,13 @@ class Build:
         return new_rel
 
     def _topic_dir(self, topic_id, topic_title):
+        if topic_title:
+            slug = self._slugify(topic_title, topic_id)
+            if topic_id:
+                return "{}-{}".format(slug, topic_id)
+            return slug
         if topic_id:
             return "topic-{}".format(topic_id)
-        if topic_title:
-            return self._slugify(topic_title, None)
         return "general"
 
     def _slugify(self, text, topic_id=None):
