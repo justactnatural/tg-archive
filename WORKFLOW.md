@@ -17,12 +17,28 @@ source .venv/bin/activate
 python3 -m unittest discover -s tests
 ```
 
+## Set API credentials (recommended)
+```zsh
+cd /Users/nathanmalitz/Code/tele-rippz/tg-archive
+if [ ! -f .env ]; then
+  cat <<'EOF' > .env
+API_ID=
+API_HASH=
+DATA_PATH=/Volumes/HD1/tg-archive/data.sqlite
+EOF
+fi
+set -a
+source .env
+set +a
+```
+
 ## Sync the database
 ```zsh
 cd /Users/nathanmalitz/Code/tele-rippz/tg-archive
 python3 -m tgarchive --sync \
   --config /Users/nathanmalitz/Code/tele-rippz/tg-archive/tgarchive/example/config.yaml \
-  --session /Users/nathanmalitz/Code/tele-rippz/tg-archive/session.session
+  --session /Users/nathanmalitz/Code/tele-rippz/tg-archive/session.session \
+  --data /Volumes/HD1/tg-archive/data.sqlite
 ```
 
 ## Build the static site (with media migration)
@@ -30,6 +46,7 @@ python3 -m tgarchive --sync \
 cd /Users/nathanmalitz/Code/tele-rippz/tg-archive
 python3 -m tgarchive --build \
   --config /Users/nathanmalitz/Code/tele-rippz/tg-archive/tgarchive/example/config.yaml \
+  --data /Volumes/HD1/tg-archive/data.sqlite \
   --template /Users/nathanmalitz/Code/tele-rippz/tg-archive/tgarchive/example/template.html \
   --media-template /Users/nathanmalitz/Code/tele-rippz/tg-archive/tgarchive/example/media_template.html \
   --migrate-media
@@ -41,6 +58,7 @@ Note: both `--template` and `--media-template` are required.
 cd /Users/nathanmalitz/Code/tele-rippz/tg-archive
 python3 -m tgarchive --build \
   --config /Users/nathanmalitz/Code/tele-rippz/tg-archive/tgarchive/example/config.yaml \
+  --data /Volumes/HD1/tg-archive/data.sqlite \
   --template /Users/nathanmalitz/Code/tele-rippz/tg-archive/tgarchive/example/template.html \
   --media-template /Users/nathanmalitz/Code/tele-rippz/tg-archive/tgarchive/example/media_template.html
 ```
