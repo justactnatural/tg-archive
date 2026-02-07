@@ -1,3 +1,4 @@
+import importlib
 import os
 import tempfile
 import unittest
@@ -7,10 +8,35 @@ try:
 except Exception as e:  # pragma: no cover
     raise unittest.SkipTest("missing dependencies: {}".format(e))
 
+import tgarchive.__init__ as tginit
 from tgarchive.__init__ import get_config
 
 
 class ConfigTests(unittest.TestCase):
+    def test_env_api_credentials_used_when_not_in_config(self):
+        old_api_id = os.environ.get("API_ID")
+        old_api_hash = os.environ.get("API_HASH")
+        os.environ["API_ID"] = "123"
+        os.environ["API_HASH"] = "abc123"
+        try:
+            importlib.reload(tginit)
+            with tempfile.TemporaryDirectory() as tmpdir:
+                path = os.path.join(tmpdir, "config.yaml")
+                with open(path, "w", encoding="utf8") as f:
+                    f.write("{}")
+                config = tginit.get_config(path)
+                self.assertEqual(config["api_id"], "123")
+                self.assertEqual(config["api_hash"], "abc123")
+        finally:
+            if old_api_id is None:
+                os.environ.pop("API_ID", None)
+            else:
+                os.environ["API_ID"] = old_api_id
+            if old_api_hash is None:
+                os.environ.pop("API_HASH", None)
+            else:
+                os.environ["API_HASH"] = old_api_hash
+            importlib.reload(tginit)
     def test_group_defaults_merge(self):
         cfg = {
             "defaults": {
