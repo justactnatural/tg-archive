@@ -92,7 +92,9 @@
 					{% set day = m.date.strftime("%d %B %Y") %}
 					{% if loop.index0 == 0 or day != messages[loop.index0 - 1].date.strftime("%d %B %Y") %}
 						<li class="day" id="{{ m.date.strftime('%Y-%m-%d') }}">
-							<span class="title">{{ day }} <span class="count">({{ dayline[m.date.strftime("%Y-%m-%d")].count }} messages)</span></span>
+							{% set day_key = m.date.strftime("%Y-%m-%d") %}
+							{% set day_row = dayline.get(day_key) if dayline else None %}
+							<span class="title">{{ day }} <span class="count">({{ day_row.count if day_row else 0 }} messages)</span></span>
 						</li>
 					{% endif %}
 					<li class="message type-{{ m.type }}" id="{{ m.id }}">
